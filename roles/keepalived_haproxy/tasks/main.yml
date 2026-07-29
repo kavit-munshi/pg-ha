@@ -1,0 +1,96 @@
+---
+- name: Validate Keepalived authentication token
+  ansible.builtin.assert:
+    that:
+      - keepalived_auth_pass | length >= 1
+      - keepalived_auth_pass | length <= 8
+      - keepalived_auth_pass != "CHANGE_ME"
+    fail_msg: "keepalived_auth_pass must be a non-default VRRP PASS token of 1-8 characters."
+  no_log: true
+
+- name: Install Keepalived, HAProxy, and PostgreSQL client
+  ansible.builtin.apt:
+    name:
+      - keepalived
+      - haproxy
+      - postgresql-client
+      - socat
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Permit HAProxy to bind the VIP on either router
+  ansible.posix.sysctl:
+    name: net.ipv4.ip_nonlocal_bind
+    value: "1"
+    sysctl_file: /etc/sysctl.d/61-haproxy-ha.conf
+    state: present
+    reload: true
+
+- name: Select Keepalived state and priority
+  ansible.builtin.set_fact:
+    keepalived_state: "{{ 'MASTER' if routing_slot == 'primary' else 'BACKUP' }}"
+    keepalived_priority: "{{ 101 if routing_slot == 'primary' else 100 }}"
+
+- name: Deploy HAProxy primary-state health-check credentials
+  ansible.builtin.template:
+    src: pg-primary-check.env.j2
+    dest: /etc/haproxy/pg-primary-check.env
+    owner: root
+    group: haproxy
+    mode: "0640"
+  no_log: true
+  notify: Restart HAProxy
+
+- name: Deploy HAProxy primary-state external check
+  ansible.builtin.template:
+    src: check-pg-primary.sh.j2
+    dest: /usr/local/sbin/check-pg-primary
+    owner: root
+    group: haproxy
+    mode: "0750"
+  notify: Restart HAProxy
+
+- name: Deploy HAProxy configuration
+  ansible.builtin.template:
+    src: haproxy.cfg.j2
+    dest: /etc/haproxy/haproxy.cfg
+    owner: root
+    group: root
+    mode: "0644"
+    validate: /usr/sbin/haproxy -c -f %s
+  notify: Restart HAProxy
+
+- name: Deploy Keepalived HAProxy tracking script
+  ansible.builtin.copy:
+    dest: /usr/local/sbin/check-haproxy
+    owner: root
+    group: root
+    mode: "0755"
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+      /usr/bin/systemctl is-active --quiet haproxy
+  notify: Restart Keepalived
+
+- name: Deploy Keepalived configuration
+  ansible.builtin.template:
+    src: keepalived.conf.j2
+    dest: /etc/keepalived/keepalived.conf
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  notify: Restart Keepalived
+
+- name: Enable and start HAProxy before Keepalived
+  ansible.builtin.systemd:
+    name: haproxy
+    enabled: true
+    state: started
+
+- name: Enable and start Keepalived
+  ansible.builtin.systemd:
+    name: keepalived
+    enabled: true
+    state: started

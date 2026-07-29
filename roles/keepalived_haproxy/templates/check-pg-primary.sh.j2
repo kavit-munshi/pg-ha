@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source /etc/haproxy/pg-primary-check.env
+backend_address="${HAPROXY_SERVER_ADDR:-${3:-}}"
+
+case "${backend_address}" in
+  "{{ host_ips[groups['routing_nodes'][0]] }}")
+    database_address="{{ host_ips[groups['db_primary'][0]] }}"
+    ;;
+  "{{ host_ips[groups['routing_nodes'][1]] }}")
+    database_address="{{ host_ips[groups['db_standby'][0]] }}"
+    ;;
+  *)
+    exit 1
+    ;;
+esac
+
+result="$(
+  PGPASSWORD="${PG_PRIMARY_CHECK_PASSWORD}" \
+  psql "host=${database_address} port={{ postgresql_port }} dbname={{ app_database }} user={{ haproxy_health_user }} sslmode=require connect_timeout=3" \
+    --no-align --tuples-only --command="SELECT pg_is_in_recovery();" 2>/dev/null
+)"
+
+[[ "${result}" == "f" ]]
+

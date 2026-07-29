@@ -1,0 +1,25 @@
+---
+- name: Ensure Ansible SSH directory exists
+  ansible.builtin.file:
+    path: /home/ansible/.ssh
+    state: directory
+    owner: ansible
+    group: ansible
+    mode: "0700"
+
+- name: Install control-node operator SSH public key
+  ansible.posix.authorized_key:
+    user: ansible
+    state: present
+    key: "{{ lookup('ansible.builtin.file', lookup('ansible.builtin.env', 'HOME') + '/.ssh/id_rsa.pub') }}"
+    manage_dir: false
+  no_log: true
+
+- name: Enforce authorized_keys ownership and permissions
+  ansible.builtin.file:
+    path: /home/ansible/.ssh/authorized_keys
+    state: file
+    owner: ansible
+    group: ansible
+    mode: "0600"
+

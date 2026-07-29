@@ -1,0 +1,120 @@
+---
+- name: Install UFW
+  ansible.builtin.apt:
+    name: ufw
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Reset UFW to remove undeclared rules
+  community.general.ufw:
+    state: reset
+  when: ufw_reset_rules | bool
+
+- name: Set default UFW policies
+  community.general.ufw:
+    direction: "{{ item.direction }}"
+    policy: "{{ item.policy }}"
+  loop:
+    - { direction: incoming, policy: deny }
+    - { direction: outgoing, policy: allow }
+
+- name: Allow SSH access before enabling UFW
+  community.general.ufw:
+    rule: allow
+    from_ip: "{{ item }}"
+    to_port: "22"
+    proto: tcp
+    comment: Ansible and operator SSH
+  loop: "{{ ufw_ssh_allowed_cidrs }}"
+
+- name: Allow Prometheus node exporter from scraper network
+  community.general.ufw:
+    rule: allow
+    from_ip: "{{ metrics_allowed_cidr }}"
+    to_port: "{{ node_exporter_port | string }}"
+    proto: tcp
+    comment: Prometheus node exporter
+
+- name: Allow PostgreSQL and pg_auto_failover traffic on database nodes
+  community.general.ufw:
+    rule: allow
+    from_ip: "{{ item }}"
+    to_port: "{{ postgresql_port | string }}"
+    proto: tcp
+    comment: PostgreSQL and pg_auto_failover
+  loop: "{{ ufw_database_allowed_cidrs }}"
+  when: inventory_hostname in groups['db_cluster']
+
+- name: Allow PostgreSQL exporter from scraper network
+  community.general.ufw:
+    rule: allow
+    from_ip: "{{ metrics_allowed_cidr }}"
+    to_port: "{{ postgres_exporter_port | string }}"
+    proto: tcp
+    comment: Prometheus PostgreSQL exporter
+  when: inventory_hostname in groups['db_cluster']
+
+- name: Allow application connections to HAProxy VIP
+  community.general.ufw:
+    rule: allow
+    from_ip: "{{ application_client_cidr }}"
+    to_port: "{{ haproxy_listen_port | string }}"
+    proto: tcp
+    comment: Application PostgreSQL VIP
+  when: inventory_hostname in groups['routing_nodes']
+
+- name: Allow HAProxy connections to PgBouncer
+  community.general.ufw:
+    rule: allow
+    from_ip: "{{ cluster_cidr }}"
+    to_port: "{{ pgbouncer_listen_port | string }}"
+    proto: tcp
+    comment: HAProxy to PgBouncer
+  when: inventory_hostname in groups['routing_nodes']
+
+- name: Allow PgBouncer exporter from scraper network
+  community.general.ufw:
+    rule: allow
+    from_ip: "{{ metrics_allowed_cidr }}"
+    to_port: "{{ pgbouncer_exporter_port | string }}"
+    proto: tcp
+    comment: Prometheus PgBouncer exporter
+  when: inventory_hostname in groups['routing_nodes']
+
+- name: Allow VRRP heartbeat from routing peer only
+  community.general.ufw:
+    rule: allow
+    from_ip: "{{ host_ips[item] }}"
+    to_ip: "{{ host_ips[inventory_hostname] }}"
+    proto: vrrp
+    comment: Keepalived VRRP peer
+  loop: "{{ groups['routing_nodes'] }}"
+  when:
+    - inventory_hostname in groups['routing_nodes']
+    - item != inventory_hostname
+
+- name: Enable UFW logging
+  community.general.ufw:
+    logging: "on"
+
+- name: Enable UFW and configure it to start on boot
+  community.general.ufw:
+    state: enabled
+
+- name: Verify enforced UFW status
+  ansible.builtin.command:
+    argv:
+      - ufw
+      - status
+      - verbose
+  register: ufw_enforced_status
+  changed_when: false
+  environment:
+    LC_ALL: C
+  failed_when: >-
+    ufw_enforced_status.rc != 0
+    or 'Status: active' not in ufw_enforced_status.stdout
+    or 'Logging: on' not in ufw_enforced_status.stdout
+    or 'deny (incoming)' not in ufw_enforced_status.stdout
+    or 'allow (outgoing)' not in ufw_enforced_status.stdout

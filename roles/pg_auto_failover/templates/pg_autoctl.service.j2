@@ -1,0 +1,20 @@
+[Unit]
+Description=pg_auto_failover service for {{ inventory_hostname }}
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=postgres
+Group=postgres
+Environment=PGDATA={{ pgdata_path }}
+Environment=PATH=/usr/lib/postgresql/{{ postgresql_version }}/bin:/usr/bin:/bin
+ExecStart={{ pg_autoctl_bin }} run --pgdata {{ pgdata_path }}
+Restart=always
+RestartSec=5
+TimeoutStopSec=120
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+

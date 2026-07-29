@@ -1,0 +1,66 @@
+---
+- name: Validate deployment inputs
+  hosts: all_nodes
+  gather_facts: false
+  become: false
+  tasks:
+    - name: Validate required secrets and host mappings
+      ansible.builtin.assert:
+        that:
+          - host_ips[inventory_hostname] | length > 0
+          - cluster_cidr | length > 0
+          - ntp_servers | length >= 1
+          - pg_auto_failover_monitor_password != "CHANGE_ME"
+          - app_db_password != "CHANGE_ME"
+          - postgres_exporter_password != "CHANGE_ME"
+          - haproxy_health_password != "CHANGE_ME"
+          - keepalived_auth_pass != "CHANGE_ME"
+        fail_msg: >-
+          Replace all CHANGE_ME values (preferably with Ansible Vault) and verify
+          host_ips before deployment.
+
+- name: Prepare operating systems, time synchronization, and storage
+  hosts: all_nodes
+  become: true
+  roles:
+    - ufw_firewall
+    - os_tuning
+    - storage_lvm
+
+- name: Create pg_auto_failover monitor
+  hosts: db_monitor
+  become: true
+  roles:
+    - pg_auto_failover
+
+- name: Create pg_auto_failover primary
+  hosts: db_primary
+  become: true
+  roles:
+    - pg_auto_failover
+
+- name: Create pg_auto_failover standby
+  hosts: db_standby
+  become: true
+  roles:
+    - pg_auto_failover
+
+- name: Configure database users and WAL archiving
+  hosts: db_primary:db_standby:db_monitor
+  serial: 1
+  become: true
+  roles:
+    - backup_wal
+
+- name: Configure connection and routing tier
+  hosts: routing_nodes
+  become: true
+  roles:
+    - pgbouncer
+    - keepalived_haproxy
+
+- name: Install monitoring agents
+  hosts: all_nodes
+  become: true
+  roles:
+    - monitoring_agents

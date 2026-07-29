@@ -1,0 +1,17 @@
+# Managed by Ansible.
+listen_addresses = '*'
+port = {{ postgresql_port }}
+shared_buffers = '{{ postgres_shared_buffers }}'
+effective_cache_size = '{{ postgres_effective_cache_size }}'
+work_mem = '{{ postgres_work_mem }}'
+maintenance_work_mem = '{{ postgres_maintenance_work_mem }}'
+max_connections = {{ postgres_max_connections }}
+logging_collector = on
+log_directory = '{{ pglog_path }}'
+log_filename = 'postgresql-%Y-%m-%d_%H%M%S.log'
+log_rotation_age = '1d'
+log_truncate_on_rotation = on
+ssl = on
+password_encryption = 'scram-sha-256'
+hot_standby = on
+synchronous_commit = on

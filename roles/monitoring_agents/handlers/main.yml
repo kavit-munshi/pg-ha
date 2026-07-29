@@ -1,0 +1,19 @@
+---
+- name: Restart PostgreSQL exporter
+  ansible.builtin.systemd:
+    name: prometheus-postgres-exporter
+    state: restarted
+
+- name: Reload systemd for exporters
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: Restart PgBouncer exporter
+  ansible.builtin.systemd:
+    name: prometheus-pgbouncer-exporter
+    state: restarted
+
+- name: Restart rsyslog
+  ansible.builtin.systemd:
+    name: rsyslog
+    state: restarted

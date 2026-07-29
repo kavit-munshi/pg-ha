@@ -1,0 +1,94 @@
+---
+ansible_user: ansible
+ansible_become: true
+ansible_python_interpreter: /usr/bin/python3
+ansible_host: "{{ host_ips[inventory_hostname] }}"
+
+postgresql_version: 18
+postgresql_port: 5432
+pgdata_path: /pgdata/data
+pgwal_path: /pgdata/wal
+pglog_path: /pgdata/log
+pgtemp_path: /pgdata/tmp
+pgbinary_path: /pgdata/binaries
+pginstance_path: /pgdata/dbinst
+wal_archive_path: /pgdata/WalArchive
+pg_autoctl_bin: /usr/bin/pg_autoctl
+pg_autoctl_service_name: pg_autoctl
+pg_auto_failover_db: pg_auto_failover
+pg_auto_failover_user: autoctl_node
+
+app_database: qms
+app_db_user: qms_app
+pgbouncer_listen_port: 6432
+pgbouncer_max_client_conn: 5000
+pgbouncer_default_pool_size: 100
+pgbouncer_max_prepared_statements: 100
+pgbouncer_pool_mode: transaction
+
+haproxy_listen_port: 5432
+haproxy_stats_port: 8404
+keepalived_interface: ens192
+keepalived_virtual_router_id: 51
+keepalived_check_interval: 2
+
+# Time Synchronization / NTP Settings
+ntp_servers:
+  - 0.ca.pool.ntp.org
+  - 1.ca.pool.ntp.org
+  - 2.ca.pool.ntp.org
+  - 3.ca.pool.ntp.org
+chrony_service_name: chrony
+
+postgres_shared_buffers: 8GB
+postgres_effective_cache_size: 24GB
+postgres_work_mem: 16MB
+postgres_maintenance_work_mem: 2GB
+postgres_max_connections: 500
+
+metrics_allowed_cidr: "{{ prometheus_scrape_cidr }}"
+node_exporter_port: 9100
+postgres_exporter_port: 9187
+pgbouncer_exporter_port: 9127
+postgres_exporter_user: postgres_exporter
+haproxy_health_user: haproxy_check
+
+# UFW is rebuilt from the declared role matrix so unmanaged rules cannot leave
+# unintended ports exposed. Set false only during an explicitly approved
+# firewall migration that preserves pre-existing rules.
+ufw_reset_rules: true
+ufw_ssh_allowed_cidrs:
+  - any
+ufw_database_allowed_cidrs:
+  - "{{ cluster_cidr }}"
+  - "{{ application_client_cidr }}"
+configure_logstash_forwarding: false
+logstash_port: 514
+rubrik_rbs_enabled: false
+rubrik_rbs_hook_command: /opt/rubrik/bin/rbs-post-wal-archive
+
+storage_vg_name: vg_pgdata
+storage_db_device: /dev/sdb
+storage_monitor_vg_device: /dev/sdc
+storage_archive_device: /dev/sdb
+storage_routing_device: /dev/sdb
+storage_db_lvs:
+  - { name: lv_data, size: 100g, mount: /pgdata/data }
+  - { name: lv_wal, size: 300g, mount: /pgdata/wal }
+  - { name: lv_log, size: 30g, mount: /pgdata/log }
+  - { name: lv_tmp, size: 30g, mount: /pgdata/tmp }
+  - { name: lv_binaries, size: 100g, mount: /pgdata/binaries }
+  - { name: lv_dbinst, size: 100g, mount: /pgdata/dbinst }
+
+sysctl_settings:
+  vm.swappiness: "10"
+  vm.overcommit_memory: "2"
+  net.core.somaxconn: "4096"
+
+# Put secret values in an encrypted vars file in production. The environment
+# group_vars files deliberately retain guard values until the operator changes them.
+pg_auto_failover_monitor_password: CHANGE_ME
+app_db_password: CHANGE_ME
+postgres_exporter_password: CHANGE_ME
+haproxy_health_password: CHANGE_ME
+keepalived_auth_pass: CHANGE_ME

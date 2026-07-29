@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+wal_file="${1:?archived WAL path is required}"
+
+{% if rubrik_rbs_enabled | bool %}
+{{ rubrik_rbs_hook_command }} "${wal_file}"
+{% else %}
+# RBS is disabled. Set rubrik_rbs_enabled=true and customize
+# rubrik_rbs_hook_command after the Rubrik Backup Service agent is installed.
+exit 0
+{% endif %}
+

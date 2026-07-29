@@ -1,0 +1,175 @@
+---
+- name: Install storage management packages
+  ansible.builtin.apt:
+    name:
+      - lvm2
+      - xfsprogs
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Validate database storage device selection
+  ansible.builtin.assert:
+    that:
+      - storage_db_device == "/dev/sdb"
+    fail_msg: "Database storage is intentionally restricted to /dev/sdb."
+  when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+
+- name: Partition database data disk for LVM
+  community.general.parted:
+    device: "{{ storage_db_device }}"
+    number: 1
+    label: gpt
+    flags:
+      - lvm
+    part_start: 1MiB
+    part_end: 100%
+    state: present
+  when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+
+- name: Partition monitor data disk for LVM
+  community.general.parted:
+    device: "{{ storage_monitor_vg_device }}"
+    number: 1
+    label: gpt
+    flags:
+      - lvm
+    part_start: 1MiB
+    part_end: 100%
+    state: present
+  when: inventory_hostname in groups['db_monitor']
+
+- name: Create database volume group
+  community.general.lvg:
+    vg: "{{ storage_vg_name }}"
+    pvs: >-
+      {{ (storage_monitor_vg_device if inventory_hostname in groups['db_monitor']
+          else storage_db_device) + '1' }}
+    state: present
+  when: inventory_hostname in groups['db_cluster']
+
+- name: Create database logical volumes
+  community.general.lvol:
+    vg: "{{ storage_vg_name }}"
+    lv: "{{ item.name }}"
+    size: "{{ item.size }}"
+    shrink: false
+    state: present
+  loop: "{{ storage_db_lvs }}"
+  when: inventory_hostname in groups['db_cluster']
+
+- name: Format database logical volumes with XFS
+  community.general.filesystem:
+    dev: "/dev/{{ storage_vg_name }}/{{ item.name }}"
+    fstype: xfs
+  loop: "{{ storage_db_lvs }}"
+  when: inventory_hostname in groups['db_cluster']
+
+- name: Create database mount points
+  ansible.builtin.file:
+    path: "{{ item.mount }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop: "{{ storage_db_lvs }}"
+  when: inventory_hostname in groups['db_cluster']
+
+- name: Mount database logical volumes persistently
+  ansible.posix.mount:
+    path: "{{ item.mount }}"
+    src: "/dev/{{ storage_vg_name }}/{{ item.name }}"
+    fstype: xfs
+    opts: defaults,noatime
+    dump: "0"
+    passno: "0"
+    state: mounted
+  loop: "{{ storage_db_lvs }}"
+  when: inventory_hostname in groups['db_cluster']
+
+- name: Validate monitor archive device selection
+  ansible.builtin.assert:
+    that:
+      - storage_archive_device == "/dev/sdb"
+    fail_msg: "Monitor archive storage is intentionally restricted to /dev/sdb."
+  when: inventory_hostname in groups['db_monitor']
+
+- name: Create 400 GiB monitor archive partition
+  community.general.parted:
+    device: "{{ storage_archive_device }}"
+    number: 1
+    label: gpt
+    part_start: 1MiB
+    part_end: 400GiB
+    state: present
+  when: inventory_hostname in groups['db_monitor']
+
+- name: Format monitor archive partition with XFS
+  community.general.filesystem:
+    dev: "{{ storage_archive_device }}1"
+    fstype: xfs
+  when: inventory_hostname in groups['db_monitor']
+
+- name: Create monitor archive mount point
+  ansible.builtin.file:
+    path: "{{ wal_archive_path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: inventory_hostname in groups['db_monitor']
+
+- name: Mount monitor archive partition persistently
+  ansible.posix.mount:
+    path: "{{ wal_archive_path }}"
+    src: "{{ storage_archive_device }}1"
+    fstype: xfs
+    opts: defaults,noatime
+    dump: "0"
+    passno: "0"
+    state: mounted
+  when: inventory_hostname in groups['db_monitor']
+
+- name: Validate routing storage device selection
+  ansible.builtin.assert:
+    that:
+      - storage_routing_device == "/dev/sdb"
+    fail_msg: "Routing storage is intentionally restricted to /dev/sdb."
+  when: inventory_hostname in groups['routing_nodes']
+
+- name: Create 120 GiB routing data partition
+  community.general.parted:
+    device: "{{ storage_routing_device }}"
+    number: 1
+    label: gpt
+    part_start: 1MiB
+    part_end: 120GiB
+    state: present
+  when: inventory_hostname in groups['routing_nodes']
+
+- name: Format routing data partition with XFS
+  community.general.filesystem:
+    dev: "{{ storage_routing_device }}1"
+    fstype: xfs
+  when: inventory_hostname in groups['routing_nodes']
+
+- name: Create routing data mount point
+  ansible.builtin.file:
+    path: /pgdata
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: inventory_hostname in groups['routing_nodes']
+
+- name: Mount routing data partition persistently
+  ansible.posix.mount:
+    path: /pgdata
+    src: "{{ storage_routing_device }}1"
+    fstype: xfs
+    opts: defaults,noatime
+    dump: "0"
+    passno: "0"
+    state: mounted
+  when: inventory_hostname in groups['routing_nodes']
+

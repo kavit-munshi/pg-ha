@@ -1,0 +1,6 @@
+---
+- name: Restart pg_autoctl for archive settings
+  ansible.builtin.systemd:
+    name: "{{ pg_autoctl_service_name }}"
+    state: restarted
+

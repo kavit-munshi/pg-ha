@@ -1,0 +1,25 @@
+; Managed by Ansible.
+[databases]
+{{ app_database }} = host={{ pgbouncer_database_host }} port={{ postgresql_port }} dbname={{ app_database }} user={{ app_db_user }} client_encoding=UTF8
+
+[pgbouncer]
+listen_addr = 0.0.0.0
+listen_port = {{ pgbouncer_listen_port }}
+unix_socket_dir = /run/pgbouncer
+auth_type = scram-sha-256
+auth_file = /etc/pgbouncer/userlist.txt
+client_tls_sslmode = allow
+client_tls_key_file = /etc/pgbouncer/pgbouncer.key
+client_tls_cert_file = /etc/pgbouncer/pgbouncer.crt
+pool_mode = {{ pgbouncer_pool_mode }}
+max_client_conn = {{ pgbouncer_max_client_conn }}
+default_pool_size = {{ pgbouncer_default_pool_size }}
+max_prepared_statements = {{ pgbouncer_max_prepared_statements }}
+server_tls_sslmode = require
+ignore_startup_parameters = extra_float_digits
+admin_users = pgbouncer_exporter
+stats_users = pgbouncer_exporter
+pidfile = /run/pgbouncer/pgbouncer.pid
+logfile = /var/log/pgbouncer/pgbouncer.log
+log_connections = 1
+log_disconnections = 1

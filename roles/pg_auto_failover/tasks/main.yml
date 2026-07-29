@@ -1,0 +1,85 @@
+---
+- name: Install PostgreSQL repository signing key
+  ansible.builtin.get_url:
+    url: https://www.postgresql.org/media/keys/ACCC4CF8.asc
+    dest: /usr/share/keyrings/postgresql-pgdg.asc
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Configure the official PostgreSQL PGDG repository
+  ansible.builtin.apt_repository:
+    repo: >-
+      deb [signed-by=/usr/share/keyrings/postgresql-pgdg.asc]
+      https://apt.postgresql.org/pub/repos/apt
+      {{ ansible_distribution_release }}-pgdg main
+    filename: pgdg
+    state: present
+    update_cache: true
+
+- name: Install PostgreSQL 18 and pg_auto_failover
+  ansible.builtin.apt:
+    name:
+      - "postgresql-{{ postgresql_version }}"
+      - "postgresql-client-{{ postgresql_version }}"
+      - "pg-auto-failover-{{ postgresql_version }}"
+      - python3-psycopg
+    state: present
+
+- name: Detect package-created PostgreSQL cluster
+  ansible.builtin.command:
+    cmd: pg_lsclusters --no-header
+  register: pg_package_clusters
+  changed_when: false
+  failed_when: false
+
+- name: Remove unused package-created main cluster
+  ansible.builtin.command:
+    cmd: "pg_dropcluster --stop {{ postgresql_version }} main"
+  when:
+    - pg_package_clusters.rc == 0
+    - >-
+      pg_package_clusters.stdout is
+      search('^' + (postgresql_version | string) + '\\s+main\\s', multiline=True)
+
+- name: Disable Debian cluster wrapper service
+  ansible.builtin.systemd:
+    name: postgresql.service
+    enabled: false
+    state: stopped
+  failed_when: false
+
+- name: Set ownership on PostgreSQL LVM paths
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: "0700"
+  loop:
+    - "{{ pgdata_path }}"
+    - "{{ pgwal_path }}"
+    - "{{ pglog_path }}"
+    - "{{ pgtemp_path }}"
+    - "{{ pgbinary_path }}"
+    - "{{ pginstance_path }}"
+
+- name: Install pg_autoctl systemd unit
+  ansible.builtin.template:
+    src: pg_autoctl.service.j2
+    dest: /etc/systemd/system/pg_autoctl.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload systemd
+
+- name: Flush systemd unit handler
+  ansible.builtin.meta: flush_handlers
+
+- name: Initialize monitor node
+  ansible.builtin.include_tasks: monitor.yml
+  when: inventory_hostname in groups['db_monitor']
+
+- name: Initialize PostgreSQL data node
+  ansible.builtin.include_tasks: postgres_node.yml
+  when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])

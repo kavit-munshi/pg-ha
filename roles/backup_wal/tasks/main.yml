@@ -1,0 +1,217 @@
+---
+- name: Wait for writable primary database
+  ansible.builtin.command:
+    argv:
+      - "/usr/lib/postgresql/{{ postgresql_version }}/bin/pg_isready"
+      - -h
+      - "127.0.0.1"
+      - -p
+      - "{{ postgresql_port | string }}"
+      - -d
+      - postgres
+  become_user: postgres
+  register: writable_db_ready
+  until: writable_db_ready.rc == 0
+  retries: 30
+  delay: 2
+  changed_when: false
+  when: inventory_hostname in groups['db_primary']
+
+- name: Create application login on initial primary
+  community.postgresql.postgresql_user:
+    name: "{{ app_db_user }}"
+    password: "{{ app_db_password }}"
+    login_db: postgres
+    login_unix_socket: /var/run/postgresql
+    role_attr_flags: LOGIN
+    state: present
+  become_user: postgres
+  no_log: true
+  when: inventory_hostname in groups['db_primary']
+
+- name: Create application database owned by application login
+  community.postgresql.postgresql_db:
+    name: "{{ app_database }}"
+    owner: "{{ app_db_user }}"
+    login_unix_socket: /var/run/postgresql
+    state: present
+  become_user: postgres
+  when: inventory_hostname in groups['db_primary']
+
+- name: Create HAProxy health-check login on initial primary
+  community.postgresql.postgresql_user:
+    name: "{{ haproxy_health_user }}"
+    password: "{{ haproxy_health_password }}"
+    login_db: postgres
+    login_unix_socket: /var/run/postgresql
+    role_attr_flags: LOGIN
+    state: present
+  become_user: postgres
+  no_log: true
+  when: inventory_hostname in groups['db_primary']
+
+- name: Create PostgreSQL exporter login on initial primary
+  community.postgresql.postgresql_user:
+    name: "{{ postgres_exporter_user }}"
+    password: "{{ postgres_exporter_password }}"
+    login_db: postgres
+    login_unix_socket: /var/run/postgresql
+    role_attr_flags: LOGIN
+    state: present
+  become_user: postgres
+  no_log: true
+  when: inventory_hostname in groups['db_primary']
+
+- name: Grant pg_monitor to exporter
+  community.postgresql.postgresql_membership:
+    groups:
+      - pg_monitor
+    target_roles:
+      - "{{ postgres_exporter_user }}"
+    login_db: postgres
+    login_unix_socket: /var/run/postgresql
+    state: present
+  become_user: postgres
+  when: inventory_hostname in groups['db_primary']
+
+- name: Create exporter login on monitor database
+  community.postgresql.postgresql_user:
+    name: "{{ postgres_exporter_user }}"
+    password: "{{ postgres_exporter_password }}"
+    login_db: postgres
+    login_unix_socket: /var/run/postgresql
+    role_attr_flags: LOGIN
+    state: present
+  become_user: postgres
+  no_log: true
+  when: inventory_hostname in groups['db_monitor']
+
+- name: Grant pg_monitor to monitor exporter
+  community.postgresql.postgresql_membership:
+    groups:
+      - pg_monitor
+    target_roles:
+      - "{{ postgres_exporter_user }}"
+    login_db: postgres
+    login_unix_socket: /var/run/postgresql
+    state: present
+  become_user: postgres
+  when: inventory_hostname in groups['db_monitor']
+
+- name: Set archive directory ownership on monitor
+  ansible.builtin.file:
+    path: "{{ wal_archive_path }}"
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: "0750"
+  when: inventory_hostname in groups['db_monitor']
+
+- name: Ensure monitor postgres SSH directory exists
+  ansible.builtin.file:
+    path: /var/lib/postgresql/.ssh
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: "0700"
+  when: inventory_hostname in groups['db_monitor']
+
+- name: Ensure data-node postgres SSH directory exists
+  ansible.builtin.file:
+    path: /var/lib/postgresql/.ssh
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: "0700"
+  when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+
+- name: Generate dedicated WAL archive SSH key
+  community.crypto.openssh_keypair:
+    path: /var/lib/postgresql/.ssh/id_ed25519_wal_archive
+    type: ed25519
+    owner: postgres
+    group: postgres
+    mode: "0600"
+    comment: "wal-archive@{{ inventory_hostname }}"
+    state: present
+  when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+
+- name: Read WAL archive public key
+  ansible.builtin.slurp:
+    src: /var/lib/postgresql/.ssh/id_ed25519_wal_archive.pub
+  register: wal_archive_public_key
+  when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+
+- name: Ensure monitor postgres SSH directory exists before key authorization
+  ansible.builtin.file:
+    path: /var/lib/postgresql/.ssh
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: "0700"
+  delegate_to: "{{ groups['db_monitor'][0] }}"
+  when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+
+- name: Authorize data-node WAL key on archive monitor
+  ansible.posix.authorized_key:
+    user: postgres
+    key: "{{ wal_archive_public_key.content | b64decode }}"
+    state: present
+    manage_dir: false
+  delegate_to: "{{ groups['db_monitor'][0] }}"
+  when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+
+- name: Scan archive monitor SSH host key
+  ansible.builtin.command:
+    argv:
+      - ssh-keyscan
+      - -H
+      - "{{ host_ips[groups['db_monitor'][0]] }}"
+  register: archive_monitor_host_key
+  changed_when: false
+  when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+
+- name: Trust archive monitor SSH host key
+  ansible.builtin.known_hosts:
+    path: /var/lib/postgresql/.ssh/known_hosts
+    name: "{{ host_ips[groups['db_monitor'][0]] }}"
+    key: "{{ archive_monitor_host_key.stdout }}"
+    state: present
+  become_user: postgres
+  when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+
+- name: Install WAL archive helper
+  ansible.builtin.template:
+    src: archive-wal.sh.j2
+    dest: /usr/local/sbin/archive-wal
+    owner: root
+    group: postgres
+    mode: "0750"
+  when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+
+- name: Install WAL archive PostgreSQL settings
+  ansible.builtin.template:
+    src: postgresql-archive.conf.j2
+    dest: "{{ pgdata_path }}/postgresql-archive.conf"
+    owner: postgres
+    group: postgres
+    mode: "0600"
+  notify: Restart pg_autoctl for archive settings
+  when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+
+- name: Include WAL archive PostgreSQL settings
+  ansible.builtin.lineinfile:
+    path: "{{ pgdata_path }}/postgresql.conf"
+    line: "include_if_exists = 'postgresql-archive.conf'"
+    state: present
+  notify: Restart pg_autoctl for archive settings
+  when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+
+- name: Install Rubrik RBS integration placeholder
+  ansible.builtin.template:
+    src: rubrik-rbs-hook.sh.j2
+    dest: /usr/local/sbin/rubrik-rbs-wal-hook
+    owner: root
+    group: postgres
+    mode: "0750"
+  when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
