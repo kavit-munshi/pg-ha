@@ -1,0 +1,92 @@
+---
+- name: Initialize pg_auto_failover monitor
+  ansible.builtin.command:
+    argv:
+      - "{{ pg_autoctl_bin }}"
+      - create
+      - monitor
+      - --pgdata
+      - "{{ pgdata_path }}"
+      - --pgport
+      - "{{ postgresql_port | string }}"
+      - --hostname
+      - "{{ host_ips[inventory_hostname] }}"
+      - --auth
+      - scram-sha-256
+      - --ssl-self-signed
+      - --ssl-mode
+      - require
+  become: true
+  become_user: postgres
+  environment:
+    PGDATA: "{{ pgdata_path }}"
+  args:
+    creates: "{{ pgdata_path }}/PG_VERSION"
+
+- name: Enable and start monitor pg_autoctl service
+  ansible.builtin.systemd:
+    name: "{{ pg_autoctl_service_name }}"
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Wait for monitor PostgreSQL to accept connections
+  ansible.builtin.command:
+    argv:
+      - "/usr/lib/postgresql/{{ postgresql_version }}/bin/pg_isready"
+      - -h
+      - "127.0.0.1"
+      - -p
+      - "{{ postgresql_port | string }}"
+      - -d
+      - "{{ pg_auto_failover_db }}"
+  become: true
+  become_user: postgres
+  register: pg_auto_failover_monitor_ready
+  until: pg_auto_failover_monitor_ready.rc == 0
+  retries: 30
+  delay: 2
+  changed_when: false
+
+- name: Set monitor registration-user password
+  community.postgresql.postgresql_user:
+    name: "{{ pg_auto_failover_user }}"
+    password: "{{ pg_auto_failover_monitor_password }}"
+    login_db: "{{ pg_auto_failover_db }}"
+    login_unix_socket: /var/run/postgresql
+  become: true
+  become_user: postgres
+  no_log: true
+
+- name: Authorize pg_auto_failover data nodes in monitor HBA
+  ansible.builtin.blockinfile:
+    path: "{{ pgdata_path }}/pg_hba.conf"
+    owner: postgres
+    group: postgres
+    mode: "0600"
+    marker: "# {mark} ANSIBLE MANAGED PG_AUTO_FAILOVER CLIENTS"
+    block: |
+      {% for host in groups['db_primary'] + groups['db_standby'] %}
+      hostssl {{ pg_auto_failover_db }} {{ pg_auto_failover_user }} {{ host_ips[host] }}/32 scram-sha-256
+      {% endfor %}
+      hostssl postgres {{ postgres_exporter_user }} {{ metrics_allowed_cidr }} scram-sha-256
+  notify: Reload PostgreSQL configuration
+
+- name: Flush monitor HBA reload
+  ansible.builtin.meta: flush_handlers
+
+- name: Verify monitor state
+  ansible.builtin.command:
+    argv:
+      - "{{ pg_autoctl_bin }}"
+      - show
+      - state
+      - --pgdata
+      - "{{ pgdata_path }}"
+  become: true
+  become_user: postgres
+  register: pg_auto_failover_monitor_state
+  changed_when: false
+  retries: 10
+  delay: 2
+  until: pg_auto_failover_monitor_state.rc == 0

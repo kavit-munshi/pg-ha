@@ -1,0 +1,28 @@
+---
+deployment_environment: uat
+host_ips:
+  BHC-QMSSQLU05: 10.40.10.55
+  BHC-QMSSQLU06: 10.40.10.56
+  BHC-QMSSQLU07: 10.40.10.57
+  BHC-PGBSQLU03: 10.40.10.63
+  BHC-PGBSQLU04: 10.40.10.64
+cluster_cidr: 10.40.10.0/24
+prometheus_scrape_cidr: 10.40.20.0/24
+application_client_cidr: 10.40.30.0/24
+postgresql_vip: 10.40.10.50
+postgresql_vip_prefix: 24
+logstash_ip: 10.40.20.20
+
+# Replace with internal UAT NTP names when external pool access is restricted.
+ntp_servers:
+  - 0.ca.pool.ntp.org
+  - 1.ca.pool.ntp.org
+  - 2.ca.pool.ntp.org
+  - 3.ca.pool.ntp.org
+
+# Override these with ansible-vault encrypt_string or an encrypted vars file.
+pg_auto_failover_monitor_password: CHANGE_ME
+app_db_password: CHANGE_ME
+postgres_exporter_password: CHANGE_ME
+haproxy_health_password: CHANGE_ME
+keepalived_auth_pass: CHANGE_ME

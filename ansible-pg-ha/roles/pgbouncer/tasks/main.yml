@@ -1,0 +1,121 @@
+---
+- name: Install PgBouncer
+  ansible.builtin.apt:
+    name: pgbouncer
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Create dedicated PgBouncer service account
+  ansible.builtin.user:
+    name: pgbouncer
+    system: true
+    home: /var/lib/pgbouncer
+    shell: /usr/sbin/nologin
+    create_home: true
+
+- name: Create PgBouncer runtime and log directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: pgbouncer
+    group: pgbouncer
+    mode: "0750"
+  loop:
+    - /run/pgbouncer
+    - /var/log/pgbouncer
+
+- name: Generate PgBouncer TLS private key
+  community.crypto.openssl_privatekey:
+    path: /etc/pgbouncer/pgbouncer.key
+    owner: pgbouncer
+    group: pgbouncer
+    mode: "0600"
+    type: RSA
+    size: 3072
+  notify: Restart PgBouncer
+
+- name: Generate PgBouncer TLS certificate request
+  community.crypto.openssl_csr:
+    path: /etc/pgbouncer/pgbouncer.csr
+    privatekey_path: /etc/pgbouncer/pgbouncer.key
+    common_name: "{{ postgresql_vip }}"
+    subject_alt_name:
+      - "IP:{{ postgresql_vip }}"
+      - "IP:{{ host_ips[inventory_hostname] }}"
+      - "DNS:{{ inventory_hostname }}"
+    owner: pgbouncer
+    group: pgbouncer
+    mode: "0640"
+  notify: Restart PgBouncer
+
+- name: Generate self-signed PgBouncer TLS certificate
+  community.crypto.x509_certificate:
+    path: /etc/pgbouncer/pgbouncer.crt
+    privatekey_path: /etc/pgbouncer/pgbouncer.key
+    csr_path: /etc/pgbouncer/pgbouncer.csr
+    provider: selfsigned
+    selfsigned_not_after: "+3650d"
+    owner: pgbouncer
+    group: pgbouncer
+    mode: "0644"
+  notify: Restart PgBouncer
+
+- name: Select database candidate paired with this pooler
+  ansible.builtin.set_fact:
+    pgbouncer_database_host: >-
+      {{ host_ips[groups['db_primary'][0]]
+         if routing_slot == 'primary'
+         else host_ips[groups['db_standby'][0]] }}
+
+- name: Deploy PgBouncer configuration
+  ansible.builtin.template:
+    src: pgbouncer.ini.j2
+    dest: /etc/pgbouncer/pgbouncer.ini
+    owner: root
+    group: pgbouncer
+    mode: "0640"
+  notify: Restart PgBouncer
+
+- name: Deploy PgBouncer credential file
+  ansible.builtin.template:
+    src: userlist.txt.j2
+    dest: /etc/pgbouncer/userlist.txt
+    owner: root
+    group: pgbouncer
+    mode: "0640"
+  no_log: true
+  notify: Restart PgBouncer
+
+- name: Create PgBouncer systemd override directory
+  ansible.builtin.file:
+    path: /etc/systemd/system/pgbouncer.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Run PgBouncer under its dedicated account
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/pgbouncer.service.d/override.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Service]
+      User=pgbouncer
+      Group=pgbouncer
+      RuntimeDirectory=pgbouncer
+      RuntimeDirectoryMode=0750
+      LogsDirectory=pgbouncer
+      LimitNOFILE=65536
+  notify:
+    - Reload systemd for PgBouncer
+    - Restart PgBouncer
+
+- name: Enable and start PgBouncer
+  ansible.builtin.systemd:
+    name: pgbouncer
+    enabled: true
+    state: started
+    daemon_reload: true

@@ -1,0 +1,98 @@
+---
+- name: Install baseline operating-system packages
+  ansible.builtin.apt:
+    name:
+      - acl
+      - ca-certificates
+      - curl
+      - gnupg
+      - rsync
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Install Chrony
+  ansible.builtin.apt:
+    name: chrony
+    state: present
+
+- name: Configure strict time synchronization
+  ansible.builtin.template:
+    src: chrony.conf.j2
+    dest: /etc/chrony/chrony.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart Chrony
+
+- name: Apply Chrony configuration before continuing
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable and start Chrony
+  ansible.builtin.systemd:
+    name: "{{ chrony_service_name }}"
+    enabled: true
+    state: started
+
+- name: Wait for synchronized Chrony tracking status
+  ansible.builtin.command:
+    argv:
+      - chronyc
+      - tracking
+  register: os_tuning_chrony_tracking
+  changed_when: false
+  retries: 36
+  delay: 5
+  until: >-
+    os_tuning_chrony_tracking.stdout
+    | regex_search('(?im)^Leap status\\s*:\\s*Normal\\s*$')
+
+- name: Set canonical host name
+  ansible.builtin.hostname:
+    name: "{{ inventory_hostname }}"
+
+- name: Manage cluster host mappings
+  ansible.builtin.blockinfile:
+    path: /etc/hosts
+    marker: "# {mark} ANSIBLE MANAGED POSTGRESQL HA HOSTS"
+    block: |
+      {% for host in groups['all_nodes'] %}
+      {{ host_ips[host] }} {{ host }}
+      {% endfor %}
+
+- name: Apply database and routing sysctl settings
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    sysctl_file: /etc/sysctl.conf
+    state: present
+    reload: true
+  loop: "{{ sysctl_settings | dict2items }}"
+
+- name: Configure postgres resource limits
+  ansible.builtin.blockinfile:
+    path: /etc/security/limits.conf
+    owner: root
+    group: root
+    mode: "0644"
+    marker: "# {mark} ANSIBLE MANAGED POSTGRES LIMITS"
+    block: |
+      postgres soft nofile 65536
+      postgres hard nofile 65536
+      postgres soft nproc 4096
+      postgres hard nproc 4096
+  when: inventory_hostname in groups['db_cluster']
+
+- name: Configure PgBouncer resource limits
+  ansible.builtin.blockinfile:
+    path: /etc/security/limits.conf
+    owner: root
+    group: root
+    mode: "0644"
+    marker: "# {mark} ANSIBLE MANAGED PGBOUNCER LIMITS"
+    block: |
+      pgbouncer soft nofile 65536
+      pgbouncer hard nofile 65536
+      pgbouncer soft nproc 4096
+      pgbouncer hard nproc 4096
+  when: inventory_hostname in groups['routing_nodes']

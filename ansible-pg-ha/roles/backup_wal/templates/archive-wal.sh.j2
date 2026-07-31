@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source_path="${1:?archive source path is required}"
+wal_name="${2:?WAL filename is required}"
+archive_host="{{ host_ips[groups['db_monitor'][0]] }}"
+archive_dir="{{ wal_archive_path }}"
+ssh_key="/var/lib/postgresql/.ssh/id_ed25519_wal_archive"
+
+if ssh -i "${ssh_key}" -o BatchMode=yes postgres@"${archive_host}" \
+    "test -f '${archive_dir}/${wal_name}'"; then
+  exit 0
+fi
+
+rsync --archive --chmod=F600 -e "ssh -i ${ssh_key} -o BatchMode=yes" \
+  "${source_path}" \
+  "postgres@${archive_host}:${archive_dir}/${wal_name}.partial"
+
+ssh -i "${ssh_key}" -o BatchMode=yes postgres@"${archive_host}" \
+  "mv '${archive_dir}/${wal_name}.partial' '${archive_dir}/${wal_name}'"
+
+if [[ "{{ rubrik_rbs_enabled | bool | lower }}" == "true" ]]; then
+  /usr/local/sbin/rubrik-rbs-wal-hook "${archive_dir}/${wal_name}"
+fi
+

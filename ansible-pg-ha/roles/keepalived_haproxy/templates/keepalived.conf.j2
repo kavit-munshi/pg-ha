@@ -1,0 +1,38 @@
+global_defs {
+    router_id {{ inventory_hostname }}
+    enable_script_security
+    script_user root
+}
+
+vrrp_script chk_haproxy {
+    script "/usr/local/sbin/check-haproxy"
+    interval {{ keepalived_check_interval }}
+    timeout 2
+    fall 2
+    rise 2
+    weight -20
+}
+
+vrrp_instance VI_POSTGRES {
+    state {{ keepalived_haproxy_state }}
+    interface {{ keepalived_interface }}
+    virtual_router_id {{ keepalived_virtual_router_id }}
+    priority {{ keepalived_haproxy_priority }}
+    advert_int 1
+    authentication {
+        auth_type PASS
+        auth_pass {{ keepalived_auth_pass }}
+    }
+    unicast_src_ip {{ host_ips[inventory_hostname] }}
+    unicast_peer {
+{% for peer in groups['routing_nodes'] if peer != inventory_hostname %}
+        {{ host_ips[peer] }}
+{% endfor %}
+    }
+    virtual_ipaddress {
+        {{ postgresql_vip }}/{{ postgresql_vip_prefix }} dev {{ keepalived_interface }}
+    }
+    track_script {
+        chk_haproxy
+    }
+}

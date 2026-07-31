@@ -1,0 +1,12 @@
+---
+collections:
+  - name: ansible.posix
+    version: ">=1.6.0"
+  - name: community.general
+    # v12 removed the legacy yaml stdout callback requested by ansible.cfg.
+    # v10.3 added native proto=vrrp support to the UFW module.
+    version: ">=10.3.0,<12.0.0"
+  - name: community.postgresql
+    version: ">=3.4.0"
+  - name: community.crypto
+    version: ">=2.20.0"

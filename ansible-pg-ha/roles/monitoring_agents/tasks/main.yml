@@ -1,0 +1,114 @@
+---
+- name: Install Prometheus node exporter
+  ansible.builtin.apt:
+    name: prometheus-node-exporter
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Enable and start Prometheus node exporter
+  ansible.builtin.systemd:
+    name: prometheus-node-exporter
+    enabled: true
+    state: started
+
+- name: Install PostgreSQL exporter on database hosts
+  ansible.builtin.apt:
+    name: prometheus-postgres-exporter
+    state: present
+  when: inventory_hostname in groups['db_cluster']
+
+- name: Configure PostgreSQL exporter connection
+  ansible.builtin.template:
+    src: postgres-exporter.env.j2
+    dest: /etc/default/prometheus-postgres-exporter
+    owner: root
+    group: prometheus
+    mode: "0640"
+  no_log: true
+  notify: Restart PostgreSQL exporter
+  when: inventory_hostname in groups['db_cluster']
+
+- name: Enable and start PostgreSQL exporter
+  ansible.builtin.systemd:
+    name: prometheus-postgres-exporter
+    enabled: true
+    state: started
+  when: inventory_hostname in groups['db_cluster']
+
+- name: Install PgBouncer exporter on routing hosts
+  ansible.builtin.apt:
+    name: prometheus-pgbouncer-exporter
+    state: present
+  when: inventory_hostname in groups['routing_nodes']
+
+- name: Configure PgBouncer exporter connection
+  ansible.builtin.template:
+    src: prometheus-pgbouncer-exporter.conf.j2
+    dest: /etc/prometheus-pgbouncer-exporter.conf
+    owner: root
+    group: prometheus
+    mode: "0640"
+  notify: Restart PgBouncer exporter
+  when: inventory_hostname in groups['routing_nodes']
+
+- name: Configure PgBouncer exporter password
+  ansible.builtin.template:
+    src: pgbouncer-exporter.env.j2
+    dest: /etc/default/prometheus-pgbouncer-exporter
+    owner: root
+    group: prometheus
+    mode: "0640"
+  no_log: true
+  notify: Restart PgBouncer exporter
+  when: inventory_hostname in groups['routing_nodes']
+
+- name: Create PgBouncer exporter systemd override directory
+  ansible.builtin.file:
+    path: /etc/systemd/system/prometheus-pgbouncer-exporter.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: inventory_hostname in groups['routing_nodes']
+
+- name: Run PgBouncer exporter as unprivileged prometheus user
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/prometheus-pgbouncer-exporter.service.d/override.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Service]
+      User=prometheus
+      Group=prometheus
+      EnvironmentFile=-/etc/default/prometheus-pgbouncer-exporter
+  notify:
+    - Reload systemd for exporters
+    - Restart PgBouncer exporter
+  when: inventory_hostname in groups['routing_nodes']
+
+- name: Enable and start PgBouncer exporter
+  ansible.builtin.systemd:
+    name: prometheus-pgbouncer-exporter
+    enabled: true
+    state: started
+    daemon_reload: true
+  when: inventory_hostname in groups['routing_nodes']
+
+- name: Configure optional Logstash forwarding
+  ansible.builtin.template:
+    src: logstash-forwarding.conf.j2
+    dest: /etc/rsyslog.d/60-logstash-forwarding.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart rsyslog
+  when: configure_logstash_forwarding | bool
+
+- name: Remove Logstash forwarding when disabled
+  ansible.builtin.file:
+    path: /etc/rsyslog.d/60-logstash-forwarding.conf
+    state: absent
+  notify: Restart rsyslog
+  when: not (configure_logstash_forwarding | bool)

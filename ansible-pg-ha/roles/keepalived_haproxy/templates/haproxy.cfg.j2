@@ -1,0 +1,37 @@
+global
+    log /dev/log local0
+    log /dev/log local1 notice
+    stats socket /run/haproxy/admin.sock mode 660 level admin expose-fd listeners
+    stats timeout 30s
+    user haproxy
+    group haproxy
+    daemon
+    external-check
+
+defaults
+    log global
+    mode tcp
+    option tcplog
+    option dontlognull
+    timeout connect 5s
+    timeout client 1m
+    timeout server 1m
+    timeout check 10s
+
+listen postgresql_write
+    bind {{ postgresql_vip }}:{{ haproxy_listen_port }}
+    mode tcp
+    option external-check
+    external-check path "/usr/local/sbin:/usr/bin:/bin"
+    external-check command check-pg-primary
+    default-server inter 3s fall 2 rise 2 on-marked-down shutdown-sessions
+{% for router in groups['routing_nodes'] %}
+    server {{ router }} {{ host_ips[router] }}:{{ pgbouncer_listen_port }} check
+{% endfor %}
+
+listen statistics
+    bind 0.0.0.0:{{ haproxy_stats_port }}
+    mode http
+    stats enable
+    stats uri /stats
+    stats refresh 10s

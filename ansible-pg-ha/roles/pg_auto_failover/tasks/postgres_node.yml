@@ -1,0 +1,193 @@
+---
+- name: Wait for primary registration before creating standby
+  ansible.builtin.command:
+    argv:
+      - "{{ pg_autoctl_bin }}"
+      - show
+      - state
+      - --pgdata
+      - "{{ pgdata_path }}"
+  become: true
+  become_user: postgres
+  delegate_to: "{{ groups['db_monitor'][0] }}"
+  register: pg_auto_failover_registered_primary
+  changed_when: false
+  retries: 60
+  delay: 5
+  until:
+    - pg_auto_failover_registered_primary.rc == 0
+    - groups['db_primary'][0] in pg_auto_failover_registered_primary.stdout
+  when: inventory_hostname in groups['db_standby']
+
+- name: Build monitor connection URI
+  ansible.builtin.set_fact:
+    pg_auto_failover_monitor_uri: >-
+      {{
+        'postgres://' ~ pg_auto_failover_user ~ ':' ~
+        (pg_auto_failover_monitor_password | urlencode) ~ '@' ~
+        host_ips[groups['db_monitor'][0]] ~ ':' ~
+        (postgresql_port | string) ~ '/' ~ pg_auto_failover_db ~
+        '?sslmode=require'
+      }}
+  no_log: true
+
+- name: Initialize pg_auto_failover PostgreSQL node
+  ansible.builtin.command:
+    argv:
+      - "{{ pg_autoctl_bin }}"
+      - create
+      - postgres
+      - --pgdata
+      - "{{ pgdata_path }}"
+      - --pgport
+      - "{{ postgresql_port | string }}"
+      - --hostname
+      - "{{ host_ips[inventory_hostname] }}"
+      - --name
+      - "{{ inventory_hostname }}"
+      - --monitor
+      - "{{ pg_auto_failover_monitor_uri }}"
+      - --auth
+      - scram-sha-256
+      - --ssl-self-signed
+      - --ssl-mode
+      - require
+  become: true
+  become_user: postgres
+  environment:
+    PGDATA: "{{ pgdata_path }}"
+  args:
+    creates: "{{ pgdata_path }}/PG_VERSION"
+  no_log: true
+
+- name: Check whether WAL has already been relocated
+  ansible.builtin.stat:
+    path: "{{ pgwal_path }}/.ansible_wal_relocated"
+  register: pg_auto_failover_wal_relocation_marker
+
+- name: Relocate pg_wal onto dedicated logical volume
+  when: not pg_auto_failover_wal_relocation_marker.stat.exists
+  block:
+    - name: Stop PostgreSQL after pg_autoctl initialization
+      ansible.builtin.command:
+        argv:
+          - "/usr/lib/postgresql/{{ postgresql_version }}/bin/pg_ctl"
+          - stop
+          - -D
+          - "{{ pgdata_path }}"
+          - -m
+          - fast
+      become: true
+      become_user: postgres
+      register: pg_auto_failover_stop_for_wal
+      changed_when: pg_auto_failover_stop_for_wal.rc == 0
+      failed_when: pg_auto_failover_stop_for_wal.rc not in [0, 3]
+
+    - name: Check original pg_wal directory
+      ansible.builtin.stat:
+        path: "{{ pgdata_path }}/pg_wal"
+      register: pg_auto_failover_original_pg_wal
+
+    - name: Copy initialized WAL files to WAL logical volume
+      ansible.builtin.command:
+        argv:
+          - rsync
+          - -a
+          - "{{ pgdata_path }}/pg_wal/"
+          - "{{ pgwal_path }}/"
+      become: true
+      become_user: postgres
+      changed_when: true
+      when: pg_auto_failover_original_pg_wal.stat.exists
+
+    - name: Remove original pg_wal directory
+      ansible.builtin.file:
+        path: "{{ pgdata_path }}/pg_wal"
+        state: absent
+      when: pg_auto_failover_original_pg_wal.stat.exists
+
+    - name: Record completed WAL relocation
+      ansible.builtin.file:
+        path: "{{ pgwal_path }}/.ansible_wal_relocated"
+        state: touch
+        owner: postgres
+        group: postgres
+        mode: "0600"
+
+- name: Ensure pg_wal bind-mount target exists
+  ansible.builtin.file:
+    path: "{{ pgdata_path }}/pg_wal"
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: "0700"
+
+- name: Bind mount WAL volume into PGDATA persistently
+  ansible.posix.mount:
+    path: "{{ pgdata_path }}/pg_wal"
+    src: "{{ pgwal_path }}"
+    fstype: none
+    opts: bind
+    dump: "0"
+    passno: "0"
+    state: mounted
+
+- name: Configure PostgreSQL workload settings
+  ansible.builtin.template:
+    src: postgresql-ha.conf.j2
+    dest: "{{ pgdata_path }}/postgresql-ha.conf"
+    owner: postgres
+    group: postgres
+    mode: "0600"
+  notify: Restart pg_autoctl
+
+- name: Include workload configuration
+  ansible.builtin.lineinfile:
+    path: "{{ pgdata_path }}/postgresql.conf"
+    line: "include_if_exists = 'postgresql-ha.conf'"
+    state: present
+  notify: Restart pg_autoctl
+
+- name: Authorize application, exporter, and health-check clients
+  ansible.builtin.blockinfile:
+    path: "{{ pgdata_path }}/pg_hba.conf"
+    owner: postgres
+    group: postgres
+    mode: "0600"
+    marker: "# {mark} ANSIBLE MANAGED ROUTING AND MONITORING CLIENTS"
+    block: |
+      {% for host in groups['routing_nodes'] %}
+      hostssl {{ app_database }} {{ app_db_user }} {{ host_ips[host] }}/32 scram-sha-256
+      hostssl {{ app_database }} {{ haproxy_health_user }} {{ host_ips[host] }}/32 scram-sha-256
+      {% endfor %}
+      hostssl postgres {{ postgres_exporter_user }} {{ metrics_allowed_cidr }} scram-sha-256
+  notify: Restart pg_autoctl
+
+- name: Flush PostgreSQL configuration handlers
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable and start PostgreSQL pg_autoctl service
+  ansible.builtin.systemd:
+    name: "{{ pg_autoctl_service_name }}"
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Wait until all expected data nodes are registered
+  ansible.builtin.command:
+    argv:
+      - "{{ pg_autoctl_bin }}"
+      - show
+      - state
+      - --pgdata
+      - "{{ pgdata_path }}"
+  become: true
+  become_user: postgres
+  delegate_to: "{{ groups['db_monitor'][0] }}"
+  register: pg_auto_failover_cluster_registration
+  changed_when: false
+  retries: 60
+  delay: 5
+  until:
+    - pg_auto_failover_cluster_registration.rc == 0
+    - inventory_hostname in pg_auto_failover_cluster_registration.stdout
