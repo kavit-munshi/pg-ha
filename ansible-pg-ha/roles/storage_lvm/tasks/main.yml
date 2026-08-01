@@ -1,4 +1,8 @@
 ---
+- name: Stop storage role unless provisioning is explicitly enabled
+  ansible.builtin.meta: end_role
+  when: not (storage_lvm_enabled | default(false) | bool)
+
 - name: Install storage management packages
   ansible.builtin.apt:
     name:
@@ -63,6 +67,34 @@
     dev: "/dev/{{ storage_vg_name }}/{{ item.name }}"
     fstype: xfs
   loop: "{{ storage_db_lvs }}"
+  when: inventory_hostname in groups['db_cluster']
+
+- name: Discover existing lv_data mount targets
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/findmnt
+      - --raw
+      - --noheadings
+      - --output
+      - TARGET
+      - --source
+      - "/dev/{{ storage_vg_name }}/lv_data"
+  register: storage_lvm_existing_data_mounts
+  changed_when: false
+  failed_when: storage_lvm_existing_data_mounts.rc not in [0, 1]
+  when: inventory_hostname in groups['db_cluster']
+
+- name: Reject the legacy PGDATA mount layout
+  ansible.builtin.assert:
+    that:
+      - >-
+        storage_lvm_existing_data_mounts.rc == 1 or
+        storage_lvm_existing_data_mounts.stdout_lines | difference([pgdata_mount_path]) | length == 0
+    fail_msg: >-
+      lv_data is mounted at {{ storage_lvm_existing_data_mounts.stdout_lines | join(', ') }}.
+      Unmount the legacy PGDATA layout during an approved migration before
+      mounting lv_data at {{ pgdata_mount_path }}. The role will not mount the
+      same filesystem at two paths.
   when: inventory_hostname in groups['db_cluster']
 
 - name: Create database mount points

@@ -44,8 +44,10 @@
   retries: 36
   delay: 5
   until: >-
-    os_tuning_chrony_tracking.stdout
-    | regex_search('(?im)^Leap status\\s*:\\s*Normal\\s*$')
+    (
+      os_tuning_chrony_tracking.stdout | default('')
+      | regex_search('(?im)^Leap status\\s*:\\s*Normal\\s*$')
+    ) is not none
 
 - name: Set canonical host name
   ansible.builtin.hostname:

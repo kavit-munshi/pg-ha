@@ -25,7 +25,10 @@
   roles:
     - ufw_firewall
     - os_tuning
-    - storage_lvm
+    - role: storage_lvm
+      when: storage_lvm_enabled | default(false) | bool
+      tags:
+        - storage
 
 - name: Create pg_auto_failover monitor
   hosts: db_monitor

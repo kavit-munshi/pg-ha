@@ -22,9 +22,17 @@
     name:
       - "postgresql-{{ postgresql_version }}"
       - "postgresql-client-{{ postgresql_version }}"
-      - "pg-auto-failover-{{ postgresql_version }}"
+      - "postgresql-{{ postgresql_version }}-auto-failover"
+      - pg-auto-failover-cli
       - python3-psycopg
     state: present
+
+- name: Verify pg_autoctl is installed
+  ansible.builtin.command:
+    argv:
+      - pg_autoctl
+      - version
+  changed_when: false
 
 - name: Detect package-created PostgreSQL cluster
   ansible.builtin.command:
@@ -50,6 +58,22 @@
     state: stopped
   failed_when: false
 
+- name: Ensure postgres can traverse the PostgreSQL storage root
+  ansible.builtin.file:
+    path: /pgdata
+    state: directory
+    owner: root
+    group: postgres
+    mode: "0750"
+
+- name: Set ownership on the PostgreSQL data filesystem root
+  ansible.builtin.file:
+    path: "{{ pgdata_mount_path }}"
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: "0700"
+
 - name: Set ownership on PostgreSQL LVM paths
   ansible.builtin.file:
     path: "{{ item }}"
@@ -60,6 +84,72 @@
   loop:
     - "{{ pgdata_path }}"
     - "{{ pgwal_path }}"
+    - "{{ pgbackup_path }}"
+    - "{{ pglog_path }}"
+    - "{{ pgtemp_path }}"
+    - "{{ pgbinary_path }}"
+    - "{{ pginstance_path }}"
+
+- name: Verify the PostgreSQL data filesystem is mounted at its parent path
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/mountpoint
+      - -q
+      - "{{ pgdata_mount_path }}"
+  register: pg_auto_failover_data_root_mount
+  changed_when: false
+  failed_when: pg_auto_failover_data_root_mount.rc != 0
+
+- name: Check that PGDATA is not itself a mountpoint
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/mountpoint
+      - -q
+      - "{{ pgdata_path }}"
+  register: pg_auto_failover_pgdata_mount_check
+  changed_when: false
+  failed_when: false
+
+- name: Reject a PGDATA mountpoint that pg_autoctl cannot atomically replace
+  ansible.builtin.assert:
+    that:
+      - pg_auto_failover_pgdata_mount_check.rc != 0
+    fail_msg: >-
+      {{ pgdata_path }} must be a normal directory, not a mountpoint. Mount
+      lv_data at {{ pgdata_mount_path }} so pg_autoctl can atomically replace
+      PGDATA after pg_basebackup.
+
+- name: Inspect PGDATA and backup staging filesystems
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ pgdata_path }}"
+    - "{{ pgbackup_path }}"
+  register: pg_auto_failover_data_filesystems
+
+- name: Require PGDATA and backup staging on the same filesystem
+  ansible.builtin.assert:
+    that:
+      - >-
+        pg_auto_failover_data_filesystems.results[0].stat.dev ==
+        pg_auto_failover_data_filesystems.results[1].stat.dev
+    fail_msg: >-
+      {{ pgdata_path }} and {{ pgbackup_path }} must be on the same filesystem
+      for pg_autoctl's atomic standby replacement.
+
+- name: Verify postgres can write to PostgreSQL storage paths
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/test
+      - -w
+      - "{{ item }}"
+  become: true
+  become_user: postgres
+  changed_when: false
+  loop:
+    - "{{ pgdata_path }}"
+    - "{{ pgwal_path }}"
+    - "{{ pgbackup_path }}"
     - "{{ pglog_path }}"
     - "{{ pgtemp_path }}"
     - "{{ pgbinary_path }}"
