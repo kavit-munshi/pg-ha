@@ -6,12 +6,15 @@ ansible_host: "{{ host_ips[inventory_hostname] }}"
 
 postgresql_version: 18
 postgresql_port: 5432
-pgdata_path: /pgdata/data
+pgdata_mount_path: /pgdata/pgroot
+pgdata_path: /pgdata/pgroot/data
 pgwal_path: /pgdata/wal
+pgbackup_path: /pgdata/pgroot/backup
 pglog_path: /pgdata/log
 pgtemp_path: /pgdata/tmp
 pgbinary_path: /pgdata/binaries
 pginstance_path: /pgdata/dbinst
+pg_autoctl_config_path: "/var/lib/postgresql/.config/pg_autoctl{{ pgdata_path }}/pg_autoctl.cfg"
 wal_archive_path: /pgdata/WalArchive
 pg_autoctl_bin: /usr/bin/pg_autoctl
 pg_autoctl_service_name: pg_autoctl
@@ -73,7 +76,7 @@ storage_monitor_vg_device: /dev/sdc
 storage_archive_device: /dev/sdb
 storage_routing_device: /dev/sdb
 storage_db_lvs:
-  - { name: lv_data, size: 100g, mount: /pgdata/data }
+  - { name: lv_data, size: 100g, mount: /pgdata/pgroot }
   - { name: lv_wal, size: 300g, mount: /pgdata/wal }
   - { name: lv_log, size: 30g, mount: /pgdata/log }
   - { name: lv_tmp, size: 30g, mount: /pgdata/tmp }

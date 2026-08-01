@@ -31,6 +31,49 @@
       }}
   no_log: true
 
+- name: Validate the existing data-node pg_autoctl configuration
+  ansible.builtin.command:
+    argv:
+      - "{{ pg_autoctl_bin }}"
+      - config
+      - check
+      - --pgdata
+      - "{{ pgdata_path }}"
+  become: true
+  become_user: postgres
+  environment:
+    PGDATA: "{{ pgdata_path }}"
+    PATH: "/usr/lib/postgresql/{{ postgresql_version }}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+  register: pg_auto_failover_node_config_check
+  changed_when: false
+  failed_when: false
+  no_log: true
+
+- name: Check whether an invalid data-node configuration file exists
+  ansible.builtin.stat:
+    path: "{{ pg_autoctl_config_path }}"
+  register: pg_auto_failover_node_config_file
+  when: pg_auto_failover_node_config_check.rc != 0
+
+- name: Stop pg_autoctl before repairing invalid data-node configuration
+  ansible.builtin.systemd:
+    name: "{{ pg_autoctl_service_name }}"
+    state: stopped
+  failed_when: false
+  when: pg_auto_failover_node_config_check.rc != 0
+
+- name: Preserve invalid data-node configuration before rebuilding it
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/mv
+      - "{{ pg_autoctl_config_path }}"
+      - "{{ pg_autoctl_config_path }}.invalid-{{ ansible_date_time.iso8601_basic_short }}"
+    removes: "{{ pg_autoctl_config_path }}"
+    creates: "{{ pg_autoctl_config_path }}.invalid-{{ ansible_date_time.iso8601_basic_short }}"
+  when:
+    - pg_auto_failover_node_config_check.rc != 0
+    - pg_auto_failover_node_config_file.stat.exists
+
 - name: Initialize pg_auto_failover PostgreSQL node
   ansible.builtin.command:
     argv:
@@ -56,9 +99,29 @@
   become_user: postgres
   environment:
     PGDATA: "{{ pgdata_path }}"
-  args:
-    creates: "{{ pgdata_path }}/PG_VERSION"
+    PATH: "/usr/lib/postgresql/{{ postgresql_version }}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+  register: pg_auto_failover_node_create
+  changed_when: pg_auto_failover_node_create.rc == 0
+  failed_when: false
   no_log: true
+  when: pg_auto_failover_node_config_check.rc != 0
+
+- name: Report sanitized pg_autoctl node initialization failure
+  ansible.builtin.fail:
+    msg: >-
+      pg_autoctl create postgres failed with rc={{ pg_auto_failover_node_create.rc }}:
+      {{
+        (
+          (pg_auto_failover_node_create.stderr | default('')) ~
+          '\n' ~
+          (pg_auto_failover_node_create.stdout | default(''))
+        )
+        | replace(pg_auto_failover_monitor_password, '[REDACTED]')
+        | replace(pg_auto_failover_monitor_password | urlencode, '[REDACTED]')
+      }}
+  when:
+    - pg_auto_failover_node_create is not skipped
+    - pg_auto_failover_node_create.rc != 0
 
 - name: Check whether WAL has already been relocated
   ansible.builtin.stat:
@@ -68,6 +131,19 @@
 - name: Relocate pg_wal onto dedicated logical volume
   when: not pg_auto_failover_wal_relocation_marker.stat.exists
   block:
+    - name: Check PostgreSQL status before WAL relocation
+      ansible.builtin.command:
+        argv:
+          - "/usr/lib/postgresql/{{ postgresql_version }}/bin/pg_ctl"
+          - status
+          - -D
+          - "{{ pgdata_path }}"
+      become: true
+      become_user: postgres
+      register: pg_auto_failover_status_before_wal
+      changed_when: false
+      failed_when: pg_auto_failover_status_before_wal.rc not in [0, 3]
+
     - name: Stop PostgreSQL after pg_autoctl initialization
       ansible.builtin.command:
         argv:
@@ -81,7 +157,7 @@
       become_user: postgres
       register: pg_auto_failover_stop_for_wal
       changed_when: pg_auto_failover_stop_for_wal.rc == 0
-      failed_when: pg_auto_failover_stop_for_wal.rc not in [0, 3]
+      when: pg_auto_failover_status_before_wal.rc == 0
 
     - name: Check original pg_wal directory
       ansible.builtin.stat:

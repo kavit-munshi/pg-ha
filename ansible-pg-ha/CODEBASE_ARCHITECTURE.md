@@ -467,7 +467,7 @@ implemented layouts to `/dev/sdb` and `/dev/sdc`.
 
 | LV | Size | Mount |
 |---|---:|---|
-| `lv_data` | 100 GiB | `/pgdata/data` |
+| `lv_data` | 100 GiB | `/pgdata/pgroot` |
 | `lv_wal` | 300 GiB | `/pgdata/wal` |
 | `lv_log` | 30 GiB | `/pgdata/log` |
 | `lv_tmp` | 30 GiB | `/pgdata/tmp` |
@@ -488,6 +488,12 @@ All mounts use `defaults,noatime` and `ansible.posix.mount state=mounted`,
 which both mounts immediately and creates persistent `/etc/fstab` entries.
 Filesystem creation does not use `force`, and LVs use `shrink: false`.
 
+`/pgdata/pgroot` is the data-filesystem mountpoint. PostgreSQL uses the normal
+directory `/pgdata/pgroot/data`, while pg_autoctl stages base backups in the
+sibling directory `/pgdata/pgroot/backup`. The role rejects a mounted PGDATA
+or different device IDs for these directories because pg_autoctl atomically
+renames the completed backup directory to PGDATA.
+
 ## 8.5 `pg_auto_failover`
 
 Target: monitor, then initial primary, then standby in separate ordered plays.
@@ -498,7 +504,8 @@ The role:
 
 1. installs the PostgreSQL PGDG signing key;
 2. configures the Ubuntu release-specific PGDG repository;
-3. installs PostgreSQL 18, client tools, `pg-auto-failover-18`, and Psycopg;
+3. installs PostgreSQL 18, client tools, `postgresql-18-auto-failover`,
+   `pg-auto-failover-cli`, and Psycopg;
 4. detects and removes the unused Debian-created `18/main` cluster;
 5. disables the Debian wrapper `postgresql.service`;
 6. assigns mounted paths to `postgres:postgres`;
@@ -507,7 +514,7 @@ The role:
 The systemd unit runs:
 
 ```text
-/usr/bin/pg_autoctl run --pgdata /pgdata/data
+/usr/bin/pg_autoctl run --pgdata /pgdata/pgroot/data
 ```
 
 It runs as `postgres`, restarts automatically, waits for network-online, and
@@ -517,7 +524,7 @@ sets `LimitNOFILE=65536`.
 
 On U07, `monitor.yml` executes `pg_autoctl create monitor` with:
 
-- PGDATA `/pgdata/data`;
+- PGDATA `/pgdata/pgroot/data`;
 - port 5432;
 - monitor host IP;
 - SCRAM-SHA-256 authentication;
@@ -539,8 +546,8 @@ For the standby only, the role first delegates `pg_autoctl show state` to U07
 and waits until U05 appears.
 
 Both data nodes build a password-bearing monitor URI as a no-log fact and run
-`pg_autoctl create postgres` with SCRAM and required SSL. `PG_VERSION` is the
-creation guard.
+`pg_autoctl create postgres` with SCRAM and required SSL when their pg_autoctl
+configuration is absent or invalid.
 
 After initialization, the role:
 
@@ -548,7 +555,7 @@ After initialization, the role:
 2. copies initialized `pg_wal` contents to `/pgdata/wal`;
 3. removes the original directory;
 4. records `.ansible_wal_relocated`;
-5. bind-mounts `/pgdata/wal` at `/pgdata/data/pg_wal`;
+5. bind-mounts `/pgdata/wal` at `/pgdata/pgroot/data/pg_wal`;
 6. renders workload settings;
 7. inserts application, health-check, and exporter HBA entries;
 8. starts pg_autoctl;
@@ -767,8 +774,8 @@ the single owner of inbound rules.
 | `/etc/sysctl.conf` managed keys | `os_tuning` |
 | `/etc/security/limits.conf` managed blocks | `os_tuning` |
 | `/etc/systemd/system/pg_autoctl.service` | `pg_auto_failover` |
-| `/pgdata/data/postgresql-ha.conf` | `pg_auto_failover` |
-| `/pgdata/data/postgresql-archive.conf` | `backup_wal` |
+| `/pgdata/pgroot/data/postgresql-ha.conf` | `pg_auto_failover` |
+| `/pgdata/pgroot/data/postgresql-archive.conf` | `backup_wal` |
 | `/usr/local/sbin/archive-wal` | `backup_wal` |
 | `/usr/local/sbin/rubrik-rbs-wal-hook` | `backup_wal` |
 | `/etc/pgbouncer/pgbouncer.ini` | `pgbouncer` |

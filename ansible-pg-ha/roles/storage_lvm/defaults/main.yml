@@ -1,0 +1,4 @@
+---
+# Storage provisioning is destructive when existing partitions contain data.
+# Operators must explicitly opt in for newly provisioned machines.
+storage_lvm_enabled: false

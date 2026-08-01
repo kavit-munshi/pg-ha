@@ -23,6 +23,12 @@ The deployment creates:
 > VMware disks and device names before running `site.yml`. The OS disk
 > `/dev/sda` is not modified, but `/dev/sdb` and `/dev/sdc` are used according
 > to host role.
+>
+> Database `lv_data` must be mounted at `/pgdata/pgroot`. Do not mount it
+> directly at PGDATA. The directories `/pgdata/pgroot/data` and
+> `/pgdata/pgroot/backup` must remain ordinary sibling directories on that XFS
+> filesystem. Existing hosts using the legacy mounted-PGDATA layout require an
+> approved offline migration before this deployment is run.
 
 ## 1. Know the five hosts
 
@@ -373,7 +379,7 @@ Query the monitor on U07:
 ```bash
 ansible db_monitor -i inventories/uat_hosts.ini \
   -b --become-user postgres -m command \
-  -a "pg_autoctl show state --pgdata /pgdata/data"
+  -a "pg_autoctl show state --pgdata /pgdata/pgroot/data"
 ```
 
 Expected:
@@ -422,7 +428,13 @@ ansible all -i inventories/uat_hosts.ini -b -m shell \
   -a "df -Th /pgdata /pgdata/* 2>/dev/null || true"
 
 ansible db_primary:db_standby -i inventories/uat_hosts.ini -b -m command \
-  -a "findmnt /pgdata/data/pg_wal"
+  -a "findmnt /pgdata/pgroot/data/pg_wal"
+
+ansible db_cluster -i inventories/uat_hosts.ini -b -m command \
+  -a "mountpoint /pgdata/pgroot/data"
+
+ansible db_cluster -i inventories/uat_hosts.ini -b -m shell \
+  -a "stat -c '%d %n' /pgdata/pgroot/data /pgdata/pgroot/backup"
 ```
 
 Expected:
@@ -430,7 +442,10 @@ Expected:
 - data filesystems are XFS;
 - database logical volumes belong to `vg_pgdata`;
 - all required `/pgdata/*` mount points are present;
-- `/pgdata/data/pg_wal` is a bind mount backed by `/pgdata/wal`;
+- `/pgdata/pgroot` is the XFS `lv_data` mountpoint;
+- `/pgdata/pgroot/data` is a normal directory, not a mountpoint;
+- `/pgdata/pgroot/data` and `/pgdata/pgroot/backup` have the same device ID;
+- `/pgdata/pgroot/data/pg_wal` is a bind mount backed by `/pgdata/wal`;
 - mounts appear in `/etc/fstab`.
 
 ### 8.5 Check UFW policy and role ports
@@ -566,7 +581,7 @@ Perform this only in an approved maintenance window.
 
    ```bash
    ssh ansible@BHC-QMSSQLU07
-   sudo -u postgres pg_autoctl show state --pgdata /pgdata/data
+   sudo -u postgres pg_autoctl show state --pgdata /pgdata/pgroot/data
    ```
 
 2. On the current primary, stop pg_autoctl:
@@ -578,7 +593,7 @@ Perform this only in an approved maintenance window.
 3. Watch state on U07:
 
    ```bash
-   watch -n 2 "sudo -u postgres pg_autoctl show state --pgdata /pgdata/data"
+   watch -n 2 "sudo -u postgres pg_autoctl show state --pgdata /pgdata/pgroot/data"
    ```
 
 4. Repeat the VIP SQL test. It must reach the promoted node and return
@@ -647,7 +662,7 @@ Do not delete PGDATA immediately. Check the authoritative monitor state:
 
 ```bash
 ssh ansible@BHC-QMSSQLU07
-sudo -u postgres pg_autoctl show state --pgdata /pgdata/data
+sudo -u postgres pg_autoctl show state --pgdata /pgdata/pgroot/data
 sudo journalctl -u pg_autoctl -n 200 --no-pager
 ```
 

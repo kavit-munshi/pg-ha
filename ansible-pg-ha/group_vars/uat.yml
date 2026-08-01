@@ -1,5 +1,6 @@
 ---
 deployment_environment: uat
+storage_lvm_enabled: false
 host_ips:
   BHC-QMSSQLU05: 10.40.10.55
   BHC-QMSSQLU06: 10.40.10.56

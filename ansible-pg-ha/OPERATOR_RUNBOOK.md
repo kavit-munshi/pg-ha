@@ -32,6 +32,12 @@ retain:
 - U07: `/dev/sdb`, at least 400 GiB; `/dev/sdc`, at least 660 GiB usable
 - U03/U04: `/dev/sdb`, at least 120 GiB
 
+On database hosts, `lv_data` is mounted at `/pgdata/pgroot`. PGDATA is the
+ordinary directory `/pgdata/pgroot/data`, and pg_autoctl stages backups at
+`/pgdata/pgroot/backup`. Never mount a filesystem directly at PGDATA: standby
+creation removes PGDATA and atomically renames the completed sibling backup.
+Migrate any existing legacy layout during approved downtime before deployment.
+
 The 40 GiB OS disk `/dev/sda` is not modified. Verify every node manually:
 
 ```bash
@@ -237,16 +243,23 @@ other routing node.
 On U05/U06, verify the WAL bind mount and pg_autoctl:
 
 ```bash
-findmnt /pgdata/data/pg_wal
+findmnt /pgdata/pgroot
+mountpoint /pgdata/pgroot/data
+stat -c '%d %n' /pgdata/pgroot/data /pgdata/pgroot/backup
+findmnt /pgdata/pgroot/data/pg_wal
 systemctl status pg_autoctl --no-pager
-sudo -u postgres pg_autoctl show state --pgdata /pgdata/data
+sudo -u postgres pg_autoctl show state --pgdata /pgdata/pgroot/data
 ```
+
+`/pgdata/pgroot/data` must not be a mountpoint. The two `stat` device numbers
+must match so pg_autoctl can atomically rename a completed base backup to
+PGDATA.
 
 The authoritative cluster view is on U07:
 
 ```bash
-sudo -u postgres pg_autoctl show state --pgdata /pgdata/data
-sudo -u postgres pg_autoctl show uri --pgdata /pgdata/data
+sudo -u postgres pg_autoctl show state --pgdata /pgdata/pgroot/data
+sudo -u postgres pg_autoctl show uri --pgdata /pgdata/pgroot/data
 ```
 
 Expected result: U05 and U06 are both present; one is primary and the other is
@@ -329,7 +342,7 @@ the RBS agent, set `rubrik_rbs_enabled: true`, set
 Schedule this test in a maintenance window. Record the current primary:
 
 ```bash
-sudo -u postgres pg_autoctl show state --pgdata /pgdata/data
+sudo -u postgres pg_autoctl show state --pgdata /pgdata/pgroot/data
 ```
 
 On the current primary, stop pg_autoctl:
@@ -341,7 +354,7 @@ sudo systemctl stop pg_autoctl
 Watch the monitor until the standby becomes primary:
 
 ```bash
-watch -n 2 "sudo -u postgres pg_autoctl show state --pgdata /pgdata/data"
+watch -n 2 "sudo -u postgres pg_autoctl show state --pgdata /pgdata/pgroot/data"
 ```
 
 Repeat the VIP application query. It must still return
