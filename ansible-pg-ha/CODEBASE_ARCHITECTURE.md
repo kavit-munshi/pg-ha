@@ -560,7 +560,10 @@ environment as `PGPASSWORD`, allowing `pg_basebackup` to authenticate without
 placing the secret in command arguments or logs. The role then persists
 `replication.password` in each keeper configuration so either node can rejoin
 as a standby after a failover. A standby-only rerun delegates the primary-role
-password task to the current initial primary before retrying creation.
+password task to the current initial primary before retrying creation. Both
+the normal primary path and delegated recovery path probe `pg_isready`, start
+`pg_autoctl.service` only when PostgreSQL is unavailable, and wait for the
+local socket before using the PostgreSQL user module.
 
 After initialization, the role:
 
