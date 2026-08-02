@@ -31,48 +31,79 @@
       }}
   no_log: true
 
-- name: Validate the existing data-node pg_autoctl configuration
+- name: Check whether the data-node keeper configuration exists
+  ansible.builtin.stat:
+    path: "{{ pg_autoctl_config_path }}"
+  register: pg_auto_failover_node_config_file
+
+- name: Check whether PostgreSQL has been initialized
+  ansible.builtin.stat:
+    path: "{{ pgdata_path }}/PG_VERSION"
+  register: pg_auto_failover_node_pg_version
+
+- name: Find previously preserved keeper configurations
+  ansible.builtin.find:
+    paths: "{{ pg_autoctl_config_path | dirname }}"
+    patterns: "{{ pg_autoctl_config_path | basename }}.invalid-*"
+    file_type: file
+  register: pg_auto_failover_preserved_node_configs
+
+- name: Read current keeper group without requiring PostgreSQL to be running
   ansible.builtin.command:
     argv:
       - "{{ pg_autoctl_bin }}"
       - config
-      - check
+      - get
       - --pgdata
       - "{{ pgdata_path }}"
+      - pg_autoctl.group
   become: true
   become_user: postgres
   environment:
     PGDATA: "{{ pgdata_path }}"
     PATH: "/usr/lib/postgresql/{{ postgresql_version }}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-  register: pg_auto_failover_node_config_check
+  register: pg_auto_failover_current_keeper_group
   changed_when: false
   failed_when: false
-  no_log: true
+  when: pg_auto_failover_node_config_file.stat.exists
 
-- name: Check whether an invalid data-node configuration file exists
+- name: Restore preserved keeper configuration for existing PostgreSQL node
+  ansible.builtin.copy:
+    src: >-
+      {{ (pg_auto_failover_preserved_node_configs.files |
+          sort(attribute='mtime') | last).path }}
+    dest: "{{ pg_autoctl_config_path }}"
+    owner: postgres
+    group: postgres
+    mode: "0600"
+    remote_src: true
+  when:
+    - pg_auto_failover_node_pg_version.stat.exists
+    - pg_auto_failover_preserved_node_configs.matched | int > 0
+    - >-
+      not pg_auto_failover_node_config_file.stat.exists or
+      (pg_auto_failover_current_keeper_group.rc | default(1)) != 0 or
+      (pg_auto_failover_current_keeper_group.stdout | default('') | trim) == '-1'
+
+- name: Recheck data-node keeper configuration after recovery
   ansible.builtin.stat:
     path: "{{ pg_autoctl_config_path }}"
-  register: pg_auto_failover_node_config_file
-  when: pg_auto_failover_node_config_check.rc != 0
+  register: pg_auto_failover_recovered_node_config_file
 
-- name: Stop pg_autoctl before repairing invalid data-node configuration
+- name: Determine whether pg_autoctl node creation is required
+  ansible.builtin.set_fact:
+    pg_auto_failover_node_create_required: >-
+      {{
+        not pg_auto_failover_recovered_node_config_file.stat.exists or
+        not pg_auto_failover_node_pg_version.stat.exists
+      }}
+
+- name: Stop pg_autoctl before fresh or incomplete node creation
   ansible.builtin.systemd:
     name: "{{ pg_autoctl_service_name }}"
     state: stopped
   failed_when: false
-  when: pg_auto_failover_node_config_check.rc != 0
-
-- name: Preserve invalid data-node configuration before rebuilding it
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/mv
-      - "{{ pg_autoctl_config_path }}"
-      - "{{ pg_autoctl_config_path }}.invalid-{{ ansible_date_time.iso8601_basic_short }}"
-    removes: "{{ pg_autoctl_config_path }}"
-    creates: "{{ pg_autoctl_config_path }}.invalid-{{ ansible_date_time.iso8601_basic_short }}"
-  when:
-    - pg_auto_failover_node_config_check.rc != 0
-    - pg_auto_failover_node_config_file.stat.exists
+  when: pg_auto_failover_node_create_required | bool
 
 - name: Check primary readiness before standby bootstrap
   ansible.builtin.command:
@@ -167,7 +198,7 @@
   changed_when: pg_auto_failover_node_create.rc == 0
   failed_when: false
   no_log: true
-  when: pg_auto_failover_node_config_check.rc != 0
+  when: pg_auto_failover_node_create_required | bool
 
 - name: Report sanitized pg_autoctl node initialization failure
   ansible.builtin.fail:

@@ -553,6 +553,15 @@ Both data nodes build a password-bearing monitor URI as a no-log fact and run
 `pg_autoctl create postgres` with SCRAM and required SSL when their pg_autoctl
 configuration is absent or invalid.
 
+Rerun detection uses the keeper configuration file together with PGDATA's
+`PG_VERSION`; it does not use `pg_autoctl config check` as an existence test
+because that command also fails when a valid PostgreSQL instance is merely
+stopped. If an older run preserved a valid keeper configuration and left a
+replacement with `group = -1`, the newest preserved configuration is restored
+before the service is started. Incomplete standby creation (keeper config
+present but no `PG_VERSION`) still re-enters `pg_autoctl create` so the base
+backup can resume.
+
 The separate vaulted `pg_auto_failover_replication_password` is assigned to
 the `pgautofailover_replicator` PostgreSQL role on the primary before standby
 bootstrap. The initial standby creation receives it through the task
