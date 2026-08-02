@@ -127,6 +127,7 @@ nano group_vars/prod.yml
 
 Verify or replace:
 
+- every `ansible_host` address in the selected inventory file;
 - every host IP in `host_ips`;
 - `cluster_cidr`;
 - `prometheus_scrape_cidr`;
@@ -134,6 +135,10 @@ Verify or replace:
 - `postgresql_vip` and `postgresql_vip_prefix`;
 - `logstash_ip`;
 - `ntp_servers`.
+
+The `ansible_host` address and the corresponding `host_ips` value must match.
+The former controls Ansible SSH connections; the latter is installed in the
+managed PostgreSQL HA block in `/etc/hosts` on all five servers.
 
 The inventory choice controls which environment group variables Ansible loads:
 
@@ -184,6 +189,7 @@ Run it for every secret:
 
 ```bash
 vault_var pg_auto_failover_monitor_password
+vault_var pg_auto_failover_replication_password
 vault_var app_db_password
 vault_var postgres_exporter_password
 vault_var haproxy_health_password

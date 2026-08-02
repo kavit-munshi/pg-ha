@@ -131,7 +131,7 @@ unset secret_value
 ```
 
 Copy the complete generated YAML block into `group_vars/prod.yml`, replacing
-the matching `CHANGE_ME` line. Repeat for all five secrets and for UAT. Supply
+the matching `CHANGE_ME` line. Repeat for all six secrets and for UAT. Supply
 `--ask-vault-pass` or a protected `--vault-password-file` to commands that load
 the environment variables.
 

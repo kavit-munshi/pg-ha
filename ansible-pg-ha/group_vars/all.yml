@@ -2,7 +2,11 @@
 ansible_user: ansible
 ansible_become: true
 ansible_python_interpreter: /usr/bin/python3
-ansible_host: "{{ host_ips[inventory_hostname] }}"
+
+# Define ansible_host explicitly on every inventory host. Do not derive the
+# connection address from inventory_hostname here: inventory_hostname remains
+# the original host during delegation and can therefore send a delegated task
+# to the wrong server.
 
 postgresql_version: 18
 postgresql_port: 5432
@@ -20,6 +24,7 @@ pg_autoctl_bin: /usr/bin/pg_autoctl
 pg_autoctl_service_name: pg_autoctl
 pg_auto_failover_db: pg_auto_failover
 pg_auto_failover_user: autoctl_node
+pg_auto_failover_replication_user: pgautofailover_replicator
 
 app_database: qms
 app_db_user: qms_app
@@ -91,6 +96,7 @@ sysctl_settings:
 # Put secret values in an encrypted vars file in production. The environment
 # group_vars files deliberately retain guard values until the operator changes them.
 pg_auto_failover_monitor_password: CHANGE_ME
+pg_auto_failover_replication_password: CHANGE_ME
 app_db_password: CHANGE_ME
 postgres_exporter_password: CHANGE_ME
 haproxy_health_password: CHANGE_ME
