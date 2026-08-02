@@ -74,6 +74,55 @@
     - pg_auto_failover_node_config_check.rc != 0
     - pg_auto_failover_node_config_file.stat.exists
 
+- name: Check primary readiness before standby bootstrap
+  ansible.builtin.command:
+    argv:
+      - "/usr/lib/postgresql/{{ postgresql_version }}/bin/pg_isready"
+      - -h
+      - /var/run/postgresql
+      - -p
+      - "{{ postgresql_port | string }}"
+      - -d
+      - postgres
+  become: true
+  become_user: postgres
+  delegate_to: "{{ groups['db_primary'][0] }}"
+  register: pg_auto_failover_primary_prebootstrap_ready
+  changed_when: false
+  failed_when: false
+  when: inventory_hostname in groups['db_standby']
+
+- name: Start primary pg_autoctl service for standby bootstrap
+  ansible.builtin.systemd:
+    name: "{{ pg_autoctl_service_name }}"
+    enabled: true
+    state: started
+    daemon_reload: true
+  delegate_to: "{{ groups['db_primary'][0] }}"
+  when:
+    - inventory_hostname in groups['db_standby']
+    - (pg_auto_failover_primary_prebootstrap_ready.rc | default(1)) != 0
+
+- name: Wait for primary PostgreSQL before standby bootstrap
+  ansible.builtin.command:
+    argv:
+      - "/usr/lib/postgresql/{{ postgresql_version }}/bin/pg_isready"
+      - -h
+      - /var/run/postgresql
+      - -p
+      - "{{ postgresql_port | string }}"
+      - -d
+      - postgres
+  become: true
+  become_user: postgres
+  delegate_to: "{{ groups['db_primary'][0] }}"
+  register: pg_auto_failover_primary_bootstrap_ready
+  changed_when: false
+  retries: 30
+  delay: 2
+  until: pg_auto_failover_primary_bootstrap_ready.rc == 0
+  when: inventory_hostname in groups['db_standby']
+
 - name: Ensure primary replication credential is ready for standby bootstrap
   community.postgresql.postgresql_user:
     name: "{{ pg_auto_failover_replication_user }}"
@@ -137,6 +186,52 @@
   when:
     - pg_auto_failover_node_create is not skipped
     - pg_auto_failover_node_create.rc != 0
+
+- name: Check local primary readiness before configuring replication password
+  ansible.builtin.command:
+    argv:
+      - "/usr/lib/postgresql/{{ postgresql_version }}/bin/pg_isready"
+      - -h
+      - /var/run/postgresql
+      - -p
+      - "{{ postgresql_port | string }}"
+      - -d
+      - postgres
+  become: true
+  become_user: postgres
+  register: pg_auto_failover_local_primary_ready
+  changed_when: false
+  failed_when: false
+  when: inventory_hostname in groups['db_primary']
+
+- name: Start primary pg_autoctl before configuring replication password
+  ansible.builtin.systemd:
+    name: "{{ pg_autoctl_service_name }}"
+    enabled: true
+    state: started
+    daemon_reload: true
+  when:
+    - inventory_hostname in groups['db_primary']
+    - (pg_auto_failover_local_primary_ready.rc | default(1)) != 0
+
+- name: Wait for local primary PostgreSQL before configuring replication password
+  ansible.builtin.command:
+    argv:
+      - "/usr/lib/postgresql/{{ postgresql_version }}/bin/pg_isready"
+      - -h
+      - /var/run/postgresql
+      - -p
+      - "{{ postgresql_port | string }}"
+      - -d
+      - postgres
+  become: true
+  become_user: postgres
+  register: pg_auto_failover_local_primary_password_ready
+  changed_when: false
+  retries: 30
+  delay: 2
+  until: pg_auto_failover_local_primary_password_ready.rc == 0
+  when: inventory_hostname in groups['db_primary']
 
 - name: Set pg_auto_failover replication-role password on primary
   community.postgresql.postgresql_user:
