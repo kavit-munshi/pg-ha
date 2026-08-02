@@ -2,12 +2,12 @@
 deployment_environment: uat
 storage_lvm_enabled: false
 host_ips:
-  BHC-QMSSQLU05: 10.40.10.55
-  BHC-QMSSQLU06: 10.40.10.56
-  BHC-QMSSQLU07: 10.40.10.57
-  BHC-PGBSQLU03: 10.40.10.63
-  BHC-PGBSQLU04: 10.40.10.64
-cluster_cidr: 10.40.10.0/24
+  BHC-QMSSQLU05: 192.168.129.105
+  BHC-QMSSQLU06: 192.168.129.106
+  BHC-QMSSQLU07: 192.168.129.107
+  BHC-PGBSQLU03: 192.168.129.103
+  BHC-PGBSQLU04: 192.168.129.104
+cluster_cidr: 192.168.129.0/24
 prometheus_scrape_cidr: 10.40.20.0/24
 application_client_cidr: 10.40.30.0/24
 postgresql_vip: 10.40.10.50
@@ -23,6 +23,7 @@ ntp_servers:
 
 # Override these with ansible-vault encrypt_string or an encrypted vars file.
 pg_auto_failover_monitor_password: CHANGE_ME
+pg_auto_failover_replication_password: CHANGE_ME
 app_db_password: CHANGE_ME
 postgres_exporter_password: CHANGE_ME
 haproxy_health_password: CHANGE_ME

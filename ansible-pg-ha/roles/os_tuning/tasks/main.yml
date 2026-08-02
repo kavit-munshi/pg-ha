@@ -53,9 +53,22 @@
   ansible.builtin.hostname:
     name: "{{ inventory_hostname }}"
 
+- name: Validate cluster host mappings
+  ansible.builtin.assert:
+    that:
+      - groups['all_nodes'] | difference(host_ips.keys() | list) | length == 0
+      - host_ips.values() | reject('equalto', '') | list | length == groups['all_nodes'] | length
+    fail_msg: >-
+      host_ips must contain a non-empty address for every host in all_nodes.
+      Missing mappings: {{ groups['all_nodes'] | difference(host_ips.keys() | list) }}
+
 - name: Manage cluster host mappings
   ansible.builtin.blockinfile:
     path: /etc/hosts
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
     marker: "# {mark} ANSIBLE MANAGED POSTGRESQL HA HOSTS"
     block: |
       {% for host in groups['all_nodes'] %}

@@ -23,6 +23,7 @@ ntp_servers:
 
 # Override these with ansible-vault encrypt_string or an encrypted vars file.
 pg_auto_failover_monitor_password: CHANGE_ME
+pg_auto_failover_replication_password: CHANGE_ME
 app_db_password: CHANGE_ME
 postgres_exporter_password: CHANGE_ME
 haproxy_health_password: CHANGE_ME

@@ -74,6 +74,19 @@
     - pg_auto_failover_node_config_check.rc != 0
     - pg_auto_failover_node_config_file.stat.exists
 
+- name: Ensure primary replication credential is ready for standby bootstrap
+  community.postgresql.postgresql_user:
+    name: "{{ pg_auto_failover_replication_user }}"
+    password: "{{ pg_auto_failover_replication_password }}"
+    role_attr_flags: LOGIN,REPLICATION
+    login_db: postgres
+    login_unix_socket: /var/run/postgresql
+  become: true
+  become_user: postgres
+  delegate_to: "{{ groups['db_primary'][0] }}"
+  no_log: true
+  when: inventory_hostname in groups['db_standby']
+
 - name: Initialize pg_auto_failover PostgreSQL node
   ansible.builtin.command:
     argv:
@@ -99,6 +112,7 @@
   become_user: postgres
   environment:
     PGDATA: "{{ pgdata_path }}"
+    PGPASSWORD: "{{ pg_auto_failover_replication_password }}"
     PATH: "/usr/lib/postgresql/{{ postgresql_version }}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
   register: pg_auto_failover_node_create
   changed_when: pg_auto_failover_node_create.rc == 0
@@ -118,10 +132,64 @@
         )
         | replace(pg_auto_failover_monitor_password, '[REDACTED]')
         | replace(pg_auto_failover_monitor_password | urlencode, '[REDACTED]')
+        | replace(pg_auto_failover_replication_password, '[REDACTED]')
       }}
   when:
     - pg_auto_failover_node_create is not skipped
     - pg_auto_failover_node_create.rc != 0
+
+- name: Set pg_auto_failover replication-role password on primary
+  community.postgresql.postgresql_user:
+    name: "{{ pg_auto_failover_replication_user }}"
+    password: "{{ pg_auto_failover_replication_password }}"
+    role_attr_flags: LOGIN,REPLICATION
+    login_db: postgres
+    login_unix_socket: /var/run/postgresql
+  become: true
+  become_user: postgres
+  no_log: true
+  when: inventory_hostname in groups['db_primary']
+
+- name: Read configured pg_auto_failover replication password
+  ansible.builtin.command:
+    argv:
+      - "{{ pg_autoctl_bin }}"
+      - config
+      - get
+      - --pgdata
+      - "{{ pgdata_path }}"
+      - replication.password
+  become: true
+  become_user: postgres
+  environment:
+    PGDATA: "{{ pgdata_path }}"
+    PATH: "/usr/lib/postgresql/{{ postgresql_version }}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+  register: pg_auto_failover_current_replication_password
+  changed_when: false
+  failed_when: false
+  no_log: true
+
+- name: Persist pg_auto_failover replication password
+  ansible.builtin.command:
+    argv:
+      - "{{ pg_autoctl_bin }}"
+      - config
+      - set
+      - --pgdata
+      - "{{ pgdata_path }}"
+      - replication.password
+      - "{{ pg_auto_failover_replication_password }}"
+  become: true
+  become_user: postgres
+  environment:
+    PGDATA: "{{ pgdata_path }}"
+    PATH: "/usr/lib/postgresql/{{ postgresql_version }}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+  changed_when: true
+  no_log: true
+  when: >-
+    pg_auto_failover_current_replication_password.rc != 0 or
+    pg_auto_failover_current_replication_password.stdout !=
+    pg_auto_failover_replication_password
 
 - name: Check whether WAL has already been relocated
   ansible.builtin.stat:

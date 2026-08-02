@@ -264,13 +264,17 @@ Practical precedence from lowest to higher for this repository is:
 - Logstash and Rubrik feature flags;
 - guarded secret defaults.
 
-`ansible_host` is dynamically derived:
+Each inventory host declares an explicit `ansible_host`. This is deliberately
+not derived from `inventory_hostname`: that magic variable continues to refer
+to the original host during delegation and could otherwise route a delegated
+monitor command back to the standby. The matching environment `host_ips` map
+is used by service templates, firewall rules, and the Ansible-managed block in
+`/etc/hosts` on every node.
 
-```yaml
-ansible_host: "{{ host_ips[inventory_hostname] }}"
-```
-
-This lets the same inventory hostnames resolve to different environment IPs.
+The `os_tuning` role validates that all members of `all_nodes` have a mapping,
+then maintains the complete mapping between marked lines in `/etc/hosts`.
+`blockinfile` makes the operation idempotent and preserves unrelated local
+entries.
 
 ### 6.2 Environment variables
 
@@ -548,6 +552,15 @@ and waits until U05 appears.
 Both data nodes build a password-bearing monitor URI as a no-log fact and run
 `pg_autoctl create postgres` with SCRAM and required SSL when their pg_autoctl
 configuration is absent or invalid.
+
+The separate vaulted `pg_auto_failover_replication_password` is assigned to
+the `pgautofailover_replicator` PostgreSQL role on the primary before standby
+bootstrap. The initial standby creation receives it through the task
+environment as `PGPASSWORD`, allowing `pg_basebackup` to authenticate without
+placing the secret in command arguments or logs. The role then persists
+`replication.password` in each keeper configuration so either node can rejoin
+as a standby after a failover. A standby-only rerun delegates the primary-role
+password task to the current initial primary before retrying creation.
 
 After initialization, the role:
 

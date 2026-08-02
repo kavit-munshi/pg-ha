@@ -8,16 +8,19 @@
       ansible.builtin.assert:
         that:
           - host_ips[inventory_hostname] | length > 0
+          - (ansible_host | string) == (host_ips[inventory_hostname] | string)
           - cluster_cidr | length > 0
           - ntp_servers | length >= 1
           - pg_auto_failover_monitor_password != "CHANGE_ME"
+          - pg_auto_failover_replication_password != "CHANGE_ME"
           - app_db_password != "CHANGE_ME"
           - postgres_exporter_password != "CHANGE_ME"
           - haproxy_health_password != "CHANGE_ME"
           - keepalived_auth_pass != "CHANGE_ME"
         fail_msg: >-
           Replace all CHANGE_ME values (preferably with Ansible Vault) and verify
-          host_ips before deployment.
+          that each inventory ansible_host exactly matches its host_ips entry
+          before deployment.
 
 - name: Prepare operating systems, time synchronization, and storage
   hosts: all_nodes
