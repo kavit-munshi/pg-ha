@@ -1,0 +1,173 @@
+---
+- name: Capture routing failover baseline
+  hosts: routing_nodes
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Require explicit routing failover confirmation
+      ansible.builtin.assert:
+        that:
+          - confirm_routing_failover | default(false) | bool
+        fail_msg: Use tests/run_routing_failover.sh to run this disruptive test.
+      run_once: true  # noqa: run-once[task]
+
+    - name: Collect routing service state
+      ansible.builtin.service_facts:
+
+    - name: Require Keepalived to be active
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.services['keepalived.service'].state == 'running'
+
+    - name: Read routing interface addresses
+      ansible.builtin.command:
+        argv:
+          - /usr/sbin/ip
+          - -o
+          - -4
+          - address
+          - show
+          - dev
+          - "{{ keepalived_interface }}"
+      register: test_routing_failover_addresses
+      changed_when: false
+
+    - name: Record baseline VIP ownership
+      ansible.builtin.set_fact:
+        test_routing_failover_has_vip: >-
+          {{ postgresql_vip in test_routing_failover_addresses.stdout }}
+
+- name: Exercise and restore routing VIP failover
+  hosts: routing_nodes
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Identify original VIP owner
+      ansible.builtin.set_fact:
+        test_routing_original_owner: "{{ item }}"
+      loop: "{{ groups['routing_nodes'] }}"
+      when: hostvars[item].test_routing_failover_has_vip | bool
+      run_once: true  # noqa: run-once[task]
+
+    - name: Require one original VIP owner
+      ansible.builtin.assert:
+        that:
+          - test_routing_original_owner is defined
+          - >-
+            groups['routing_nodes'] |
+            map('extract', hostvars, 'test_routing_failover_has_vip') |
+            select('equalto', true) | list | length == 1
+      run_once: true  # noqa: run-once[task]
+
+    - name: Identify failover target
+      ansible.builtin.set_fact:
+        test_routing_failover_target: >-
+          {{ (groups['routing_nodes'] |
+              difference([test_routing_original_owner]) | first) }}
+      run_once: true  # noqa: run-once[task]
+
+    - name: Execute routing failover test
+      run_once: true  # noqa: run-once[task]
+      block:
+        - name: Stop Keepalived on original VIP owner
+          ansible.builtin.systemd:
+            name: keepalived
+            state: stopped
+          delegate_to: "{{ test_routing_original_owner }}"
+
+        - name: Wait for VIP on failover target
+          ansible.builtin.command:
+            argv:
+              - /usr/sbin/ip
+              - -o
+              - -4
+              - address
+              - show
+              - dev
+              - "{{ keepalived_interface }}"
+          delegate_to: "{{ test_routing_failover_target }}"
+          register: test_routing_failover_target_addresses
+          changed_when: false
+          retries: 30
+          delay: 2
+          until: postgresql_vip in test_routing_failover_target_addresses.stdout
+
+        - name: Verify SQL through failed-over VIP
+          ansible.builtin.command:
+            argv:
+              - psql
+              - --host
+              - "{{ postgresql_vip }}"
+              - --port
+              - "{{ haproxy_listen_port | string }}"
+              - --username
+              - "{{ app_db_user }}"
+              - --dbname
+              - "{{ app_database }}"
+              - --no-psqlrc
+              - --tuples-only
+              - --no-align
+              - --command
+              - SELECT pg_is_in_recovery();
+          environment:
+            PGPASSWORD: "{{ app_db_password }}"
+          delegate_to: "{{ test_routing_failover_target }}"
+          register: test_routing_failover_sql
+          changed_when: false
+          no_log: true
+          failed_when: test_routing_failover_sql.stdout | trim != 'f'
+      always:
+        - name: Restore Keepalived on original VIP owner
+          ansible.builtin.systemd:
+            name: keepalived
+            enabled: true
+            state: started
+          delegate_to: "{{ test_routing_original_owner }}"
+
+        - name: Wait for preferred router to reclaim VIP
+          ansible.builtin.command:
+            argv:
+              - /usr/sbin/ip
+              - -o
+              - -4
+              - address
+              - show
+              - dev
+              - "{{ keepalived_interface }}"
+          delegate_to: "{{ test_routing_original_owner }}"
+          register: test_routing_restored_addresses
+          changed_when: false
+          retries: 30
+          delay: 2
+          until: postgresql_vip in test_routing_restored_addresses.stdout
+
+        - name: Verify SQL after routing topology restoration
+          ansible.builtin.command:
+            argv:
+              - psql
+              - --host
+              - "{{ postgresql_vip }}"
+              - --port
+              - "{{ haproxy_listen_port | string }}"
+              - --username
+              - "{{ app_db_user }}"
+              - --dbname
+              - "{{ app_database }}"
+              - --no-psqlrc
+              - --tuples-only
+              - --no-align
+              - --command
+              - SELECT pg_is_in_recovery();
+          environment:
+            PGPASSWORD: "{{ app_db_password }}"
+          delegate_to: "{{ test_routing_original_owner }}"
+          register: test_routing_restored_sql
+          changed_when: false
+          no_log: true
+          failed_when: test_routing_restored_sql.stdout | trim != 'f'
+
+        - name: Report routing failover result
+          ansible.builtin.debug:
+            msg: >-
+              VIP moved from {{ test_routing_original_owner }} to
+              {{ test_routing_failover_target }} and returned successfully.

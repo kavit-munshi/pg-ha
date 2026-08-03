@@ -87,6 +87,18 @@ ansible-pg-ha/
 │   ├── all.yml
 │   ├── uat.yml
 │   └── prod.yml
+├── tests/
+│   ├── README.md
+│   ├── run_health.sh
+│   ├── run_wal_archive_test.sh
+│   ├── run_routing_failover.sh
+│   ├── run_db_failover.sh
+│   ├── run_all.sh
+│   └── playbooks/
+│       ├── health.yml
+│       ├── wal_archive.yml
+│       ├── routing_failover.yml
+│       └── db_failover.yml
 └── roles/
     ├── push_ssh_keys/
     │   └── tasks/

@@ -17,6 +17,8 @@ Documentation:
   for repository structure, roles, variables, and execution logic
 - [OPERATOR_RUNBOOK.md](OPERATOR_RUNBOOK.md) — original concise operator
   runbook
+- [tests/README.md](tests/README.md) — comprehensive health, WAL archive,
+  routing failover, and PostgreSQL switchover test procedures
 
 Environment-specific addresses are in `group_vars/uat.yml` and
 `group_vars/prod.yml`; common tunables and guarded secret defaults are in

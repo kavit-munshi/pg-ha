@@ -36,7 +36,6 @@ pgbouncer_pool_mode: transaction
 
 haproxy_listen_port: 5432
 haproxy_stats_port: 8404
-keepalived_interface: ens192
 keepalived_virtual_router_id: 51
 keepalived_check_interval: 2
 

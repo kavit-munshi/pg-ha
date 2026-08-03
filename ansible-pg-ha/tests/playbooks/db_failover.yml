@@ -1,0 +1,271 @@
+---
+- name: Capture PostgreSQL failover baseline
+  hosts: db_primary:db_standby
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Require explicit database failover confirmation
+      ansible.builtin.assert:
+        that:
+          - confirm_db_failover | default(false) | bool
+        fail_msg: Use tests/run_db_failover.sh to run this disruptive test.
+      run_once: true  # noqa: run-once[task]
+
+    - name: Query local recovery state
+      ansible.builtin.command:
+        argv:
+          - "/usr/lib/postgresql/{{ postgresql_version }}/bin/psql"
+          - --no-psqlrc
+          - --tuples-only
+          - --no-align
+          - --dbname
+          - postgres
+          - --command
+          - SELECT pg_is_in_recovery();
+      become_user: postgres
+      register: test_db_baseline_recovery
+      changed_when: false
+
+- name: Exercise and restore PostgreSQL controlled failover
+  hosts: db_monitor
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Identify original primary
+      ansible.builtin.set_fact:
+        test_db_original_primary: "{{ item }}"
+      loop: "{{ groups['db_primary'] + groups['db_standby'] }}"
+      when: hostvars[item].test_db_baseline_recovery.stdout | trim == 'f'
+
+    - name: Require exactly one original primary
+      ansible.builtin.assert:
+        that:
+          - test_db_original_primary is defined
+          - >-
+            (groups['db_primary'] + groups['db_standby']) |
+            map('extract', hostvars, 'test_db_baseline_recovery') |
+            map(attribute='stdout') | map('trim') |
+            select('equalto', 'f') | list | length == 1
+
+    - name: Identify promotion target
+      ansible.builtin.set_fact:
+        test_db_promotion_target: >-
+          {{ ((groups['db_primary'] + groups['db_standby']) |
+              difference([test_db_original_primary]) | first) }}
+
+    - name: Require stable pg_auto_failover state before testing
+      ansible.builtin.command:
+        argv:
+          - "{{ pg_autoctl_bin }}"
+          - show
+          - state
+          - --pgdata
+          - "{{ pgdata_path }}"
+      become_user: postgres
+      register: test_db_initial_monitor_state
+      changed_when: false
+      failed_when: >-
+        test_db_initial_monitor_state.rc != 0 or
+        test_db_initial_monitor_state.stdout is not
+        search('(?m)^' + test_db_original_primary + '\s*\|.*\|\s*primary\s*\|\s*primary\s*$') or
+        test_db_initial_monitor_state.stdout is not
+        search('(?m)^' + test_db_promotion_target + '\s*\|.*\|\s*secondary\s*\|\s*secondary\s*$')
+
+    - name: Test SQL through VIP before database switchover
+      ansible.builtin.command:
+        argv:
+          - psql
+          - --host
+          - "{{ postgresql_vip }}"
+          - --port
+          - "{{ haproxy_listen_port | string }}"
+          - --username
+          - "{{ app_db_user }}"
+          - --dbname
+          - "{{ app_database }}"
+          - --no-psqlrc
+          - --tuples-only
+          - --no-align
+          - --command
+          - SELECT inet_server_addr() || '|' || pg_is_in_recovery();
+      environment:
+        PGPASSWORD: "{{ app_db_password }}"
+      delegate_to: "{{ groups['routing_nodes'][0] }}"
+      register: test_db_sql_before
+      changed_when: false
+      no_log: true
+      failed_when: >-
+        (test_db_sql_before.stdout | trim) !=
+        (host_ips[test_db_original_primary] ~ '|f')
+
+    - name: Perform database failover test
+      block:
+        - name: Request controlled pg_auto_failover switchover
+          ansible.builtin.command:
+            argv:
+              - "{{ pg_autoctl_bin }}"
+              - perform
+              - switchover
+              - --pgdata
+              - "{{ pgdata_path }}"
+              - --formation
+              - default
+              - --group
+              - "0"
+              - --wait
+              - "120"
+          become_user: postgres
+          changed_when: true
+
+        - name: Wait for promotion target to become stable primary
+          ansible.builtin.command:
+            argv:
+              - "{{ pg_autoctl_bin }}"
+              - show
+              - state
+              - --pgdata
+              - "{{ pgdata_path }}"
+          become_user: postgres
+          register: test_db_failed_over_state
+          changed_when: false
+          retries: 60
+          delay: 2
+          until:
+            - >-
+              test_db_failed_over_state.stdout is
+              search('(?m)^' + test_db_promotion_target + '\s*\|.*\|\s*primary\s*\|\s*primary\s*$')
+            - >-
+              test_db_failed_over_state.stdout is
+              search('(?m)^' + test_db_original_primary + '\s*\|.*\|\s*secondary\s*\|\s*secondary\s*$')
+
+        - name: Verify VIP routes writes to promoted primary
+          ansible.builtin.command:
+            argv:
+              - psql
+              - --host
+              - "{{ postgresql_vip }}"
+              - --port
+              - "{{ haproxy_listen_port | string }}"
+              - --username
+              - "{{ app_db_user }}"
+              - --dbname
+              - "{{ app_database }}"
+              - --no-psqlrc
+              - --tuples-only
+              - --no-align
+              - --command
+              - SELECT inet_server_addr() || '|' || pg_is_in_recovery();
+          environment:
+            PGPASSWORD: "{{ app_db_password }}"
+          delegate_to: "{{ groups['routing_nodes'][0] }}"
+          register: test_db_sql_after_failover
+          changed_when: false
+          no_log: true
+          failed_when: >-
+            (test_db_sql_after_failover.stdout | trim) !=
+            (host_ips[test_db_promotion_target] ~ '|f')
+      always:
+        - name: Wait for a stable cluster before restoration
+          ansible.builtin.command:
+            argv:
+              - "{{ pg_autoctl_bin }}"
+              - show
+              - state
+              - --pgdata
+              - "{{ pgdata_path }}"
+          become_user: postgres
+          register: test_db_pre_restore_state
+          changed_when: false
+          retries: 90
+          delay: 2
+          until:
+            - >-
+              test_db_pre_restore_state.stdout is
+              search('(?m)\|\s*primary\s*\|\s*primary\s*$')
+            - >-
+              test_db_pre_restore_state.stdout is
+              search('(?m)\|\s*secondary\s*\|\s*secondary\s*$')
+
+        - name: Reset discovered current primary
+          ansible.builtin.set_fact:
+            test_db_current_primary: ""
+
+        - name: Discover current primary before restoration
+          ansible.builtin.set_fact:
+            test_db_current_primary: "{{ item }}"
+          loop: "{{ groups['db_primary'] + groups['db_standby'] }}"
+          when: >-
+            test_db_pre_restore_state.stdout is
+            search('(?m)^' + item + '\s*\|.*\|\s*primary\s*\|\s*primary\s*$')
+
+        - name: Switch back to original primary
+          ansible.builtin.command:
+            argv:
+              - "{{ pg_autoctl_bin }}"
+              - perform
+              - switchover
+              - --pgdata
+              - "{{ pgdata_path }}"
+              - --formation
+              - default
+              - --group
+              - "0"
+              - --wait
+              - "120"
+          become_user: postgres
+          changed_when: true
+          when: test_db_current_primary != test_db_original_primary
+
+        - name: Wait for original topology restoration
+          ansible.builtin.command:
+            argv:
+              - "{{ pg_autoctl_bin }}"
+              - show
+              - state
+              - --pgdata
+              - "{{ pgdata_path }}"
+          become_user: postgres
+          register: test_db_restored_state
+          changed_when: false
+          retries: 60
+          delay: 2
+          until:
+            - >-
+              test_db_restored_state.stdout is
+              search('(?m)^' + test_db_original_primary + '\s*\|.*\|\s*primary\s*\|\s*primary\s*$')
+            - >-
+              test_db_restored_state.stdout is
+              search('(?m)^' + test_db_promotion_target + '\s*\|.*\|\s*secondary\s*\|\s*secondary\s*$')
+
+        - name: Verify VIP routes writes to restored original primary
+          ansible.builtin.command:
+            argv:
+              - psql
+              - --host
+              - "{{ postgresql_vip }}"
+              - --port
+              - "{{ haproxy_listen_port | string }}"
+              - --username
+              - "{{ app_db_user }}"
+              - --dbname
+              - "{{ app_database }}"
+              - --no-psqlrc
+              - --tuples-only
+              - --no-align
+              - --command
+              - SELECT inet_server_addr() || '|' || pg_is_in_recovery();
+          environment:
+            PGPASSWORD: "{{ app_db_password }}"
+          delegate_to: "{{ groups['routing_nodes'][0] }}"
+          register: test_db_sql_restored
+          changed_when: false
+          no_log: true
+          failed_when: >-
+            (test_db_sql_restored.stdout | trim) !=
+            (host_ips[test_db_original_primary] ~ '|f')
+
+        - name: Report database failover result
+          ansible.builtin.debug:
+            msg: >-
+              Primary moved from {{ test_db_original_primary }} to
+              {{ test_db_promotion_target }} and returned successfully.

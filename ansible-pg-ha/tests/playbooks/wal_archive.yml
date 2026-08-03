@@ -1,0 +1,76 @@
+---
+- name: Discover the current PostgreSQL primary
+  hosts: db_primary:db_standby
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Require explicit WAL test confirmation
+      ansible.builtin.assert:
+        that:
+          - confirm_wal_archive_test | default(false) | bool
+        fail_msg: Use tests/run_wal_archive_test.sh to run this test.
+      run_once: true  # noqa: run-once[task]
+
+    - name: Query local recovery state
+      ansible.builtin.command:
+        argv:
+          - "/usr/lib/postgresql/{{ postgresql_version }}/bin/psql"
+          - --no-psqlrc
+          - --tuples-only
+          - --no-align
+          - --dbname
+          - postgres
+          - --command
+          - SELECT pg_is_in_recovery();
+      become_user: postgres
+      register: test_wal_recovery_state
+      changed_when: false
+
+- name: Force and verify one WAL archive operation
+  hosts: db_monitor
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Identify current primary
+      ansible.builtin.set_fact:
+        test_wal_primary: "{{ item }}"
+      loop: "{{ groups['db_primary'] + groups['db_standby'] }}"
+      when: hostvars[item].test_wal_recovery_state.stdout | trim == 'f'
+
+    - name: Require exactly one discovered primary
+      ansible.builtin.assert:
+        that:
+          - test_wal_primary is defined
+          - >-
+            (groups['db_primary'] + groups['db_standby']) |
+            map('extract', hostvars, 'test_wal_recovery_state') |
+            map(attribute='stdout') | map('trim') |
+            select('equalto', 'f') | list | length == 1
+
+    - name: Switch WAL on current primary
+      ansible.builtin.command:
+        argv:
+          - "/usr/lib/postgresql/{{ postgresql_version }}/bin/psql"
+          - --no-psqlrc
+          - --tuples-only
+          - --no-align
+          - --dbname
+          - postgres
+          - --command
+          - SELECT pg_walfile_name(pg_switch_wal());
+      become_user: postgres
+      delegate_to: "{{ test_wal_primary }}"
+      register: test_wal_segment
+      changed_when: true
+
+    - name: Wait for switched WAL segment in monitor archive
+      ansible.builtin.wait_for:
+        path: "{{ wal_archive_path }}/{{ test_wal_segment.stdout | trim }}"
+        state: present
+        timeout: 180
+
+    - name: Report archived WAL segment
+      ansible.builtin.debug:
+        msg: >-
+          {{ test_wal_segment.stdout | trim }} was archived from
+          {{ test_wal_primary }} to {{ inventory_hostname }}:{{ wal_archive_path }}.

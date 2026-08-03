@@ -19,6 +19,37 @@
     update_cache: true
     cache_valid_time: 3600
 
+- name: Validate Keepalived VIP interface exists
+  ansible.builtin.assert:
+    that:
+      - keepalived_interface in ansible_facts.interfaces
+    fail_msg: >-
+      keepalived_interface={{ keepalived_interface }} does not exist on
+      {{ inventory_hostname }}. Available interfaces:
+      {{ ansible_facts.interfaces | join(', ') }}
+
+- name: Read IPv4 addresses on the Keepalived VIP interface
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/ip
+      - -o
+      - -4
+      - address
+      - show
+      - dev
+      - "{{ keepalived_interface }}"
+  register: keepalived_haproxy_interface_addresses
+  changed_when: false
+
+- name: Validate routing-node address is assigned to the VIP interface
+  ansible.builtin.assert:
+    that:
+      - host_ips[inventory_hostname] in keepalived_haproxy_interface_addresses.stdout
+      - postgresql_vip != host_ips[inventory_hostname]
+    fail_msg: >-
+      {{ keepalived_interface }} must own {{ host_ips[inventory_hostname] }},
+      and postgresql_vip={{ postgresql_vip }} must be a separate address.
+
 - name: Permit HAProxy to bind the VIP on either router
   ansible.posix.sysctl:
     name: net.ipv4.ip_nonlocal_bind
@@ -80,6 +111,7 @@
     owner: root
     group: root
     mode: "0600"
+    validate: /usr/sbin/keepalived --config-test --log-console -f %s
   no_log: true
   notify: Restart Keepalived
 

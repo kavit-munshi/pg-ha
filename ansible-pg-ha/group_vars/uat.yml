@@ -5,13 +5,14 @@ host_ips:
   BHC-QMSSQLU05: 192.168.129.105
   BHC-QMSSQLU06: 192.168.129.106
   BHC-QMSSQLU07: 192.168.129.107
-  BHC-PGBSQLU03: 192.168.129.103
-  BHC-PGBSQLU04: 192.168.129.104
+  BHC-PGBSQLU03: 192.168.129.108
+  BHC-PGBSQLU04: 192.168.129.109
 cluster_cidr: 192.168.129.0/24
 prometheus_scrape_cidr: 10.40.20.0/24
 application_client_cidr: 10.40.30.0/24
-postgresql_vip: 10.40.10.50
+postgresql_vip: 192.168.129.110
 postgresql_vip_prefix: 24
+keepalived_interface: ens33
 logstash_ip: 10.40.20.20
 
 # Replace with internal UAT NTP names when external pool access is restricted.

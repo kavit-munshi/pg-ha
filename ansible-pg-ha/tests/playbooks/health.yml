@@ -1,0 +1,403 @@
+---
+- name: Validate common operating-system functionality
+  hosts: all_nodes
+  become: true
+  gather_facts: true
+  tasks:
+    - name: Collect service state
+      ansible.builtin.service_facts:
+
+    - name: Require common services
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.services['chrony.service'].state == 'running'
+          - ansible_facts.services['prometheus-node-exporter.service'].state == 'running'
+
+    - name: Check Chrony synchronization
+      ansible.builtin.command:
+        argv:
+          - chronyc
+          - tracking
+      register: test_chrony_tracking
+      changed_when: false
+      failed_when: >-
+        test_chrony_tracking.rc != 0 or
+        test_chrony_tracking.stdout is not
+        search('(?im)^Leap status\s*:\s*Normal\s*$')
+
+    - name: Check UFW enforcement
+      ansible.builtin.command:
+        argv:
+          - ufw
+          - status
+          - verbose
+      register: test_ufw_status
+      changed_when: false
+      failed_when: >-
+        test_ufw_status.rc != 0 or
+        'Status: active' not in test_ufw_status.stdout or
+        'deny (incoming)' not in test_ufw_status.stdout or
+        'allow (outgoing)' not in test_ufw_status.stdout
+
+    - name: Require common UFW ports
+      ansible.builtin.assert:
+        that:
+          - "'22/tcp' in test_ufw_status.stdout"
+          - (node_exporter_port | string) + '/tcp' in test_ufw_status.stdout
+
+    - name: Require database UFW ports
+      ansible.builtin.assert:
+        that:
+          - (postgresql_port | string) + '/tcp' in test_ufw_status.stdout
+          - (postgres_exporter_port | string) + '/tcp' in test_ufw_status.stdout
+      when: inventory_hostname in groups['db_cluster']
+
+    - name: Require routing UFW ports
+      ansible.builtin.assert:
+        that:
+          - (haproxy_listen_port | string) + '/tcp' in test_ufw_status.stdout
+          - (pgbouncer_listen_port | string) + '/tcp' in test_ufw_status.stdout
+          - (pgbouncer_exporter_port | string) + '/tcp' in test_ufw_status.stdout
+          - "'Keepalived VRRP peer' in test_ufw_status.stdout"
+      when: inventory_hostname in groups['routing_nodes']
+
+    - name: Check cluster hostname resolution
+      ansible.builtin.command:
+        argv:
+          - getent
+          - hosts
+          - "{{ item }}"
+      loop: "{{ groups['all_nodes'] }}"
+      changed_when: false
+
+    - name: Check node-exporter metrics
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ node_exporter_port }}/metrics"
+        return_content: false
+        status_code: 200
+
+    - name: Check optional Logstash forwarding configuration
+      ansible.builtin.stat:
+        path: /etc/rsyslog.d/60-logstash-forwarding.conf
+      register: test_logstash_configuration
+      failed_when: not test_logstash_configuration.stat.exists
+      when: configure_logstash_forwarding | bool
+
+    - name: Require rsyslog for optional Logstash forwarding
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.services['rsyslog.service'].state == 'running'
+      when: configure_logstash_forwarding | bool
+
+- name: Validate database and monitor functionality
+  hosts: db_cluster
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Collect database service state
+      ansible.builtin.service_facts:
+
+    - name: Require database services
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.services['pg_autoctl.service'].state == 'running'
+          - ansible_facts.services['prometheus-postgres-exporter.service'].state == 'running'
+
+    - name: Check PostgreSQL readiness
+      ansible.builtin.command:
+        argv:
+          - "/usr/lib/postgresql/{{ postgresql_version }}/bin/pg_isready"
+          - -h
+          - /var/run/postgresql
+          - -p
+          - "{{ postgresql_port | string }}"
+      become_user: postgres
+      changed_when: false
+
+    - name: Check local PostgreSQL recovery state
+      ansible.builtin.command:
+        argv:
+          - "/usr/lib/postgresql/{{ postgresql_version }}/bin/psql"
+          - --no-psqlrc
+          - --tuples-only
+          - --no-align
+          - --dbname
+          - postgres
+          - --command
+          - SELECT pg_is_in_recovery();
+      become_user: postgres
+      register: test_database_recovery
+      changed_when: false
+      when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+
+    - name: Check PostgreSQL exporter metrics
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ postgres_exporter_port }}/metrics"
+        return_content: false
+        status_code: 200
+
+    - name: Check database XFS mounts
+      ansible.builtin.command:
+        argv:
+          - findmnt
+          - --noheadings
+          - --output
+          - FSTYPE
+          - --target
+          - "{{ item }}"
+      loop:
+        - "{{ pgdata_mount_path }}"
+        - "{{ pgwal_path }}"
+        - "{{ pglog_path }}"
+        - "{{ pgtemp_path }}"
+        - "{{ pgbinary_path }}"
+        - "{{ pginstance_path }}"
+      register: test_database_mounts
+      changed_when: false
+      failed_when: test_database_mounts.stdout | trim != 'xfs'
+
+    - name: Check monitor archive XFS mount
+      ansible.builtin.command:
+        argv:
+          - findmnt
+          - --noheadings
+          - --output
+          - FSTYPE
+          - --target
+          - "{{ wal_archive_path }}"
+      register: test_archive_mount
+      changed_when: false
+      failed_when: test_archive_mount.stdout | trim != 'xfs'
+      when: inventory_hostname in groups['db_monitor']
+
+    - name: Check WAL archive settings on data nodes
+      ansible.builtin.command:
+        argv:
+          - "/usr/lib/postgresql/{{ postgresql_version }}/bin/psql"
+          - --no-psqlrc
+          - --tuples-only
+          - --no-align
+          - --dbname
+          - postgres
+          - --command
+          - >-
+            SELECT current_setting('wal_level') || '|' ||
+            current_setting('archive_mode') || '|' ||
+            current_setting('archive_command');
+      become_user: postgres
+      register: test_archive_settings
+      changed_when: false
+      failed_when: >-
+        not test_archive_settings.stdout.startswith('replica|on|') or
+        'archive-wal' not in test_archive_settings.stdout
+      when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+
+    - name: Inspect WAL transport and Rubrik hook files
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /usr/local/sbin/archive-wal
+        - /usr/local/sbin/rubrik-rbs-wal-hook
+        - /var/lib/postgresql/.ssh/id_ed25519_wal_archive
+      register: test_wal_integration_files
+      when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+
+    - name: Require protected executable WAL integration files
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+          - >-
+            item.item == '/var/lib/postgresql/.ssh/id_ed25519_wal_archive' or
+            (item.stat.executable | default(false))
+          - >-
+            item.item != '/var/lib/postgresql/.ssh/id_ed25519_wal_archive' or
+            (item.stat.mode | default('')) == '0600'
+      loop: "{{ test_wal_integration_files.results }}"
+      when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+
+    - name: Require exactly one writable data node
+      ansible.builtin.assert:
+        that:
+          - >-
+            (groups['db_primary'] + groups['db_standby']) |
+            map('extract', hostvars, 'test_database_recovery') |
+            map(attribute='stdout') | map('trim') |
+            select('equalto', 'f') | list | length == 1
+          - >-
+            (groups['db_primary'] + groups['db_standby']) |
+            map('extract', hostvars, 'test_database_recovery') |
+            map(attribute='stdout') | map('trim') |
+            select('equalto', 't') | list | length == 1
+      run_once: true  # noqa: run-once[task]
+
+    - name: Check stable pg_auto_failover state
+      ansible.builtin.command:
+        argv:
+          - "{{ pg_autoctl_bin }}"
+          - show
+          - state
+          - --pgdata
+          - "{{ pgdata_path }}"
+      become_user: postgres
+      delegate_to: "{{ groups['db_monitor'][0] }}"
+      register: test_pg_autoctl_state
+      changed_when: false
+      run_once: true  # noqa: run-once[task]
+      failed_when: >-
+        test_pg_autoctl_state.rc != 0 or
+        groups['db_primary'][0] not in test_pg_autoctl_state.stdout or
+        groups['db_standby'][0] not in test_pg_autoctl_state.stdout or
+        test_pg_autoctl_state.stdout is not search('(?m)\|\s*primary\s*\|\s*primary\s*$') or
+        test_pg_autoctl_state.stdout is not search('(?m)\|\s*secondary\s*\|\s*secondary\s*$')
+
+- name: Validate routing, pooling, VIP, and monitoring functionality
+  hosts: routing_nodes
+  become: true
+  gather_facts: true
+  tasks:
+    - name: Collect routing service state
+      ansible.builtin.service_facts:
+
+    - name: Require routing services
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.services['pgbouncer.service'].state == 'running'
+          - ansible_facts.services['haproxy.service'].state == 'running'
+          - ansible_facts.services['keepalived.service'].state == 'running'
+          - ansible_facts.services['prometheus-pgbouncer-exporter.service'].state == 'running'
+          - keepalived_interface in ansible_facts.interfaces
+
+    - name: Validate Keepalived configuration
+      ansible.builtin.command:
+        argv:
+          - /usr/sbin/keepalived
+          - --config-test
+          - --log-console
+          - -f
+          - /etc/keepalived/keepalived.conf
+      changed_when: false
+
+    - name: Validate HAProxy configuration
+      ansible.builtin.command:
+        argv:
+          - /usr/sbin/haproxy
+          - -c
+          - -f
+          - /etc/haproxy/haproxy.cfg
+      changed_when: false
+
+    - name: Check routing XFS mount
+      ansible.builtin.command:
+        argv:
+          - findmnt
+          - --noheadings
+          - --output
+          - FSTYPE
+          - --target
+          - /pgdata
+      register: test_routing_mount
+      changed_when: false
+      failed_when: test_routing_mount.stdout | trim != 'xfs'
+
+    - name: Check PgBouncer physical listener
+      ansible.builtin.wait_for:
+        host: "{{ host_ips[inventory_hostname] }}"
+        port: "{{ pgbouncer_listen_port }}"
+        state: started
+        timeout: 5
+
+    - name: Query PgBouncer pool state
+      ansible.builtin.command:
+        argv:
+          - psql
+          - --host
+          - "{{ host_ips[inventory_hostname] }}"
+          - --port
+          - "{{ pgbouncer_listen_port | string }}"
+          - --username
+          - pgbouncer_exporter
+          - --dbname
+          - pgbouncer
+          - --no-psqlrc
+          - --command
+          - SHOW POOLS;
+      environment:
+        PGPASSWORD: "{{ postgres_exporter_password }}"
+      changed_when: false
+      no_log: true
+
+    - name: Check HAProxy statistics listener
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ haproxy_stats_port }}/stats"
+        return_content: false
+        status_code: 200
+
+    - name: Require an UP HAProxy write backend
+      ansible.builtin.shell: |
+        set -o pipefail
+        echo "show stat" | socat stdio /run/haproxy/admin.sock
+      args:
+        executable: /bin/bash
+      register: test_haproxy_runtime_stats
+      changed_when: false
+      failed_when: >-
+        test_haproxy_runtime_stats.rc != 0 or
+        test_haproxy_runtime_stats.stdout is not
+        search('(?m)^postgresql_write,[^,]+,(?:[^,]*,){15}UP,')
+
+    - name: Check PgBouncer exporter metrics
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ pgbouncer_exporter_port }}/metrics"
+        return_content: false
+        status_code: 200
+
+    - name: Detect VIP ownership
+      ansible.builtin.command:
+        argv:
+          - /usr/sbin/ip
+          - -o
+          - -4
+          - address
+          - show
+          - dev
+          - "{{ keepalived_interface }}"
+      register: test_routing_addresses
+      changed_when: false
+
+    - name: Record VIP ownership
+      ansible.builtin.set_fact:
+        test_routing_has_vip: "{{ postgresql_vip in test_routing_addresses.stdout }}"
+
+    - name: Require exactly one VIP owner
+      ansible.builtin.assert:
+        that:
+          - >-
+            groups['routing_nodes'] |
+            map('extract', hostvars, 'test_routing_has_vip') |
+            select('equalto', true) | list | length == 1
+      run_once: true  # noqa: run-once[task]
+
+    - name: Test complete VIP to primary SQL path
+      ansible.builtin.command:
+        argv:
+          - psql
+          - --host
+          - "{{ postgresql_vip }}"
+          - --port
+          - "{{ haproxy_listen_port | string }}"
+          - --username
+          - "{{ app_db_user }}"
+          - --dbname
+          - "{{ app_database }}"
+          - --no-psqlrc
+          - --tuples-only
+          - --no-align
+          - --command
+          - SELECT pg_is_in_recovery();
+      environment:
+        PGPASSWORD: "{{ app_db_password }}"
+      register: test_routing_sql
+      changed_when: false
+      no_log: true
+      failed_when: test_routing_sql.stdout | trim != 'f'
+      run_once: true  # noqa: run-once[task]
