@@ -87,6 +87,18 @@ ansible-pg-ha/
 │   ├── all.yml
 │   ├── uat.yml
 │   └── prod.yml
+├── tests/
+│   ├── README.md
+│   ├── run_health.sh
+│   ├── run_wal_archive_test.sh
+│   ├── run_routing_failover.sh
+│   ├── run_db_failover.sh
+│   ├── run_all.sh
+│   └── playbooks/
+│       ├── health.yml
+│       ├── wal_archive.yml
+│       ├── routing_failover.yml
+│       └── db_failover.yml
 └── roles/
     ├── push_ssh_keys/
     │   └── tasks/
@@ -552,6 +564,15 @@ and waits until U05 appears.
 Both data nodes build a password-bearing monitor URI as a no-log fact and run
 `pg_autoctl create postgres` with SCRAM and required SSL when their pg_autoctl
 configuration is absent or invalid.
+
+Rerun detection uses the keeper configuration file together with PGDATA's
+`PG_VERSION`; it does not use `pg_autoctl config check` as an existence test
+because that command also fails when a valid PostgreSQL instance is merely
+stopped. If an older run preserved a valid keeper configuration and left a
+replacement with `group = -1`, the newest preserved configuration is restored
+before the service is started. Incomplete standby creation (keeper config
+present but no `PG_VERSION`) still re-enters `pg_autoctl create` so the base
+backup can resume.
 
 The separate vaulted `pg_auto_failover_replication_password` is assigned to
 the `pgautofailover_replicator` PostgreSQL role on the primary before standby

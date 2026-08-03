@@ -153,7 +153,8 @@ ssh
 
 Confirm at least:
 
-- `keepalived_interface` matches the routing hosts, normally `ens192`;
+- environment-specific `keepalived_interface` matches the VIP-facing routing
+  interface (`ens33` in the documented UAT environment);
 - PostgreSQL memory values are appropriate for 32 GB database hosts;
 - all storage devices and logical-volume sizes match VMware provisioning;
 - `ufw_ssh_allowed_cidrs` contains the operator/control network;
@@ -476,10 +477,10 @@ Every host must show:
 
 ```bash
 ansible routing_nodes -i inventories/uat_hosts.ini -b -m command \
-  -a "ip -brief address show dev ens192"
+  -a "ip -brief address show dev ens33"
 ```
 
-Replace `ens192` if `keepalived_interface` differs. The VIP should appear on
+Use the selected environment's `keepalived_interface`. The VIP should appear on
 exactly one routing node.
 
 Check services:

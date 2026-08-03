@@ -48,8 +48,9 @@ sudo lvs
 ip -br link
 ```
 
-Confirm the routing NIC name is `ens192`. If not, change
-`keepalived_interface` in `group_vars/all.yml`.
+Confirm the routing VIP-facing NIC name. UAT currently uses `ens33`; configure
+`keepalived_interface` independently in `group_vars/uat.yml` and
+`group_vars/prod.yml`.
 
 Network prerequisites:
 
@@ -284,7 +285,7 @@ On both routing nodes:
 
 ```bash
 systemctl status pgbouncer haproxy keepalived --no-pager
-ip -brief address show dev ens192
+ip -brief address show dev ens33
 echo "show stat" | sudo socat stdio /run/haproxy/admin.sock
 curl -fsS http://127.0.0.1:8404/stats >/dev/null
 ```
