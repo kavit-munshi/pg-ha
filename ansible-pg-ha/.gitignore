@@ -1,4 +1,5 @@
 *.retry
 .vault_password
 artifacts/
-
+.ansible/
+.cache/

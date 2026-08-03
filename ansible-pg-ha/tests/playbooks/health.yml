@@ -111,6 +111,7 @@
           - /var/run/postgresql
           - -p
           - "{{ postgresql_port | string }}"
+      become: true
       become_user: postgres
       changed_when: false
 
@@ -125,6 +126,7 @@
           - postgres
           - --command
           - SELECT pg_is_in_recovery();
+      become: true
       become_user: postgres
       register: test_database_recovery
       changed_when: false
@@ -184,6 +186,7 @@
             SELECT current_setting('wal_level') || '|' ||
             current_setting('archive_mode') || '|' ||
             current_setting('archive_command');
+      become: true
       become_user: postgres
       register: test_archive_settings
       changed_when: false
@@ -238,6 +241,7 @@
           - state
           - --pgdata
           - "{{ pgdata_path }}"
+      become: true
       become_user: postgres
       delegate_to: "{{ groups['db_monitor'][0] }}"
       register: test_pg_autoctl_state

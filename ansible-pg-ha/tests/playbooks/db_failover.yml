@@ -22,6 +22,7 @@
           - postgres
           - --command
           - SELECT pg_is_in_recovery();
+      become: true
       become_user: postgres
       register: test_db_baseline_recovery
       changed_when: false
@@ -61,6 +62,7 @@
           - state
           - --pgdata
           - "{{ pgdata_path }}"
+      become: true
       become_user: postgres
       register: test_db_initial_monitor_state
       changed_when: false
@@ -114,6 +116,7 @@
               - "0"
               - --wait
               - "120"
+          become: true
           become_user: postgres
           changed_when: true
 
@@ -125,6 +128,7 @@
               - state
               - --pgdata
               - "{{ pgdata_path }}"
+          become: true
           become_user: postgres
           register: test_db_failed_over_state
           changed_when: false
@@ -173,6 +177,7 @@
               - state
               - --pgdata
               - "{{ pgdata_path }}"
+          become: true
           become_user: postgres
           register: test_db_pre_restore_state
           changed_when: false
@@ -212,6 +217,7 @@
               - "0"
               - --wait
               - "120"
+          become: true
           become_user: postgres
           changed_when: true
           when: test_db_current_primary != test_db_original_primary
@@ -224,6 +230,7 @@
               - state
               - --pgdata
               - "{{ pgdata_path }}"
+          become: true
           become_user: postgres
           register: test_db_restored_state
           changed_when: false
