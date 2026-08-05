@@ -36,23 +36,66 @@
     state: started
   when: inventory_hostname in groups['db_cluster']
 
-- name: Install PgBouncer exporter on routing hosts
+- name: Collect installed package facts on routing hosts
+  ansible.builtin.package_facts:
+    manager: auto
+  when: inventory_hostname in groups['routing_nodes']
+
+- name: Stop legacy Python PgBouncer exporter
+  ansible.builtin.systemd:
+    name: prometheus-pgbouncer-exporter
+    enabled: false
+    state: stopped
+  failed_when: false
+  when:
+    - inventory_hostname in groups['routing_nodes']
+    - "'prometheus-pgbouncer-exporter' in ansible_facts.packages"
+
+- name: Remove incompatible legacy Python PgBouncer exporter
   ansible.builtin.apt:
     name: prometheus-pgbouncer-exporter
+    state: absent
+    purge: true
+  when:
+    - inventory_hostname in groups['routing_nodes']
+    - "'prometheus-pgbouncer-exporter' in ansible_facts.packages"
+
+- name: Install Prometheus Community PgBouncer exporter
+  ansible.builtin.apt:
+    name: "{{ pgbouncer_exporter_package }}"
     state: present
   when: inventory_hostname in groups['routing_nodes']
 
-- name: Configure PgBouncer exporter connection
-  ansible.builtin.template:
-    src: prometheus-pgbouncer-exporter.conf.j2
-    dest: /etc/prometheus-pgbouncer-exporter.conf
-    owner: root
-    group: prometheus
-    mode: "0640"
-  notify: Restart PgBouncer exporter
+- name: Verify Prometheus Community PgBouncer exporter binary
+  ansible.builtin.stat:
+    path: "{{ pgbouncer_exporter_bin }}"
+  register: monitoring_pgbouncer_exporter_binary
   when: inventory_hostname in groups['routing_nodes']
 
-- name: Configure PgBouncer exporter password
+- name: Require Prometheus Community PgBouncer exporter binary
+  ansible.builtin.assert:
+    that:
+      - monitoring_pgbouncer_exporter_binary.stat.exists
+      - monitoring_pgbouncer_exporter_binary.stat.executable
+    fail_msg: >-
+      Package {{ pgbouncer_exporter_package }} did not install the expected
+      executable {{ pgbouncer_exporter_bin }}.
+  when: inventory_hostname in groups['routing_nodes']
+
+- name: Remove legacy PgBouncer exporter configuration
+  ansible.builtin.file:
+    path: /etc/prometheus-pgbouncer-exporter.conf
+    state: absent
+  when: inventory_hostname in groups['routing_nodes']
+
+- name: Remove legacy PgBouncer exporter systemd override
+  ansible.builtin.file:
+    path: /etc/systemd/system/prometheus-pgbouncer-exporter.service.d
+    state: absent
+  notify: Reload systemd for exporters
+  when: inventory_hostname in groups['routing_nodes']
+
+- name: Configure PgBouncer exporter environment
   ansible.builtin.template:
     src: pgbouncer-exporter.env.j2
     dest: /etc/default/prometheus-pgbouncer-exporter
@@ -63,26 +106,24 @@
   notify: Restart PgBouncer exporter
   when: inventory_hostname in groups['routing_nodes']
 
-- name: Create PgBouncer exporter systemd override directory
-  ansible.builtin.file:
-    path: /etc/systemd/system/prometheus-pgbouncer-exporter.service.d
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
+- name: Configure PgBouncer exporter password file
+  ansible.builtin.template:
+    src: pgbouncer-exporter.pgpass.j2
+    dest: /etc/prometheus-pgbouncer-exporter.pgpass
+    owner: prometheus
+    group: prometheus
+    mode: "0600"
+  no_log: true
+  notify: Restart PgBouncer exporter
   when: inventory_hostname in groups['routing_nodes']
 
-- name: Run PgBouncer exporter as unprivileged prometheus user
-  ansible.builtin.copy:
-    dest: /etc/systemd/system/prometheus-pgbouncer-exporter.service.d/override.conf
+- name: Install Prometheus Community PgBouncer exporter service
+  ansible.builtin.template:
+    src: prometheus-pgbouncer-exporter.service.j2
+    dest: /etc/systemd/system/prometheus-pgbouncer-exporter.service
     owner: root
     group: root
     mode: "0644"
-    content: |
-      [Service]
-      User=prometheus
-      Group=prometheus
-      EnvironmentFile=-/etc/default/prometheus-pgbouncer-exporter
   notify:
     - Reload systemd for exporters
     - Restart PgBouncer exporter
@@ -130,8 +171,8 @@
 
 - name: Report PgBouncer exporter startup failure
   ansible.builtin.fail:
-    msg: >-
-      prometheus-pgbouncer-exporter did not remain active. Recent journal:\n
+    msg: |-
+      prometheus-pgbouncer-exporter did not remain active. Recent journal:
       {{ monitoring_pgbouncer_exporter_journal.stdout }}
   when:
     - inventory_hostname in groups['routing_nodes']

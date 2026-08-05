@@ -152,8 +152,9 @@ ansible-pg-ha/
     │   └── templates/
     │       ├── logstash-forwarding.conf.j2
     │       ├── pgbouncer-exporter.env.j2
+    │       ├── pgbouncer-exporter.pgpass.j2
     │       ├── postgres-exporter.env.j2
-    │       └── prometheus-pgbouncer-exporter.conf.j2
+    │       └── prometheus-pgbouncer-exporter.service.j2
     └── backup_wal/
         ├── handlers/
         │   └── main.yml
@@ -781,7 +782,7 @@ Target: all nodes, with conditional exporters.
 |---|---|---:|
 | All nodes | `prometheus-node-exporter` | 9100 |
 | DB cluster | `prometheus-postgres-exporter` | 9187 |
-| Routing | `prometheus-pgbouncer-exporter` | 9127 |
+| Routing | `golang-github-prometheus-community-pgbouncer-exporter` | 9127 |
 
 ### PostgreSQL exporter
 
@@ -790,9 +791,12 @@ The environment template constructs a required-SSL local connection to the
 
 ### PgBouncer exporter
 
-Ubuntu 24.04 supplies the Python exporter. The role renders its native
-configuration file, supplies `PGPASSWORD` through a protected environment file,
-and overrides systemd to run as the unprivileged `prometheus` user.
+The legacy Ubuntu Python exporter is incompatible with PgBouncer 1.22 because
+it expects the removed `SHOW STATS` column `total_requests`. The role removes
+that package and installs Ubuntu 24.04's Prometheus Community Go exporter. A
+managed systemd unit runs it as the unprivileged `prometheus` user. Credentials
+are read from a mode `0600` pgpass file instead of being exposed in process
+arguments.
 
 ### Logstash
 
@@ -823,8 +827,9 @@ the single owner of inbound rules.
 | `/usr/local/sbin/check-pg-primary` | `keepalived_haproxy` |
 | `/etc/keepalived/keepalived.conf` | `keepalived_haproxy` |
 | `/etc/default/prometheus-postgres-exporter` | `monitoring_agents` |
-| `/etc/prometheus-pgbouncer-exporter.conf` | `monitoring_agents` |
 | `/etc/default/prometheus-pgbouncer-exporter` | `monitoring_agents` |
+| `/etc/prometheus-pgbouncer-exporter.pgpass` | `monitoring_agents` |
+| `/etc/systemd/system/prometheus-pgbouncer-exporter.service` | `monitoring_agents` |
 | `/etc/rsyslog.d/60-logstash-forwarding.conf` | `monitoring_agents` |
 
 ## 10. Service ownership

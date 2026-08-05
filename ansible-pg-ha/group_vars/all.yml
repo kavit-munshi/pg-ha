@@ -57,6 +57,8 @@ metrics_allowed_cidr: "{{ prometheus_scrape_cidr }}"
 node_exporter_port: 9100
 postgres_exporter_port: 9187
 pgbouncer_exporter_port: 9127
+pgbouncer_exporter_package: golang-github-prometheus-community-pgbouncer-exporter
+pgbouncer_exporter_bin: /usr/bin/pgbouncer_exporter
 postgres_exporter_user: postgres_exporter
 haproxy_health_user: haproxy_check
 

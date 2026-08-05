@@ -396,8 +396,13 @@
     - name: Check PgBouncer exporter metrics
       ansible.builtin.uri:
         url: "http://127.0.0.1:{{ pgbouncer_exporter_port }}/metrics"
-        return_content: false
+        return_content: true
         status_code: 200
+      register: test_pgbouncer_exporter_metrics
+      failed_when: >-
+        test_pgbouncer_exporter_metrics.status != 200 or
+        test_pgbouncer_exporter_metrics.content is not
+        search('(?m)^pgbouncer_(stats|pools)_')
 
     - name: Detect VIP ownership
       ansible.builtin.command:
