@@ -1,0 +1,23 @@
+[Unit]
+Description=Prometheus Community exporter for PgBouncer
+Requires=pgbouncer.service
+After=network-online.target pgbouncer.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=prometheus
+Group=prometheus
+EnvironmentFile=/etc/default/prometheus-pgbouncer-exporter
+ExecStart={{ pgbouncer_exporter_bin }} \
+  --web.listen-address=0.0.0.0:{{ pgbouncer_exporter_port }} \
+  --pgBouncer.connectionString=postgresql://pgbouncer_exporter@127.0.0.1:{{ pgbouncer_listen_port }}/pgbouncer?sslmode=disable
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+
+[Install]
+WantedBy=multi-user.target
