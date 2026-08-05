@@ -96,6 +96,47 @@
     daemon_reload: true
   when: inventory_hostname in groups['routing_nodes']
 
+- name: Apply PgBouncer exporter handler changes
+  ansible.builtin.meta: flush_handlers
+
+- name: Wait for PgBouncer exporter to remain active
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - is-active
+      - prometheus-pgbouncer-exporter.service
+  register: monitoring_pgbouncer_exporter_active
+  changed_when: false
+  failed_when: false
+  retries: 5
+  delay: 2
+  until: monitoring_pgbouncer_exporter_active.rc == 0
+  when: inventory_hostname in groups['routing_nodes']
+
+- name: Read PgBouncer exporter journal after startup failure
+  ansible.builtin.command:
+    argv:
+      - journalctl
+      - --unit
+      - prometheus-pgbouncer-exporter.service
+      - --lines
+      - "100"
+      - --no-pager
+  register: monitoring_pgbouncer_exporter_journal
+  changed_when: false
+  when:
+    - inventory_hostname in groups['routing_nodes']
+    - monitoring_pgbouncer_exporter_active.rc != 0
+
+- name: Report PgBouncer exporter startup failure
+  ansible.builtin.fail:
+    msg: >-
+      prometheus-pgbouncer-exporter did not remain active. Recent journal:\n
+      {{ monitoring_pgbouncer_exporter_journal.stdout }}
+  when:
+    - inventory_hostname in groups['routing_nodes']
+    - monitoring_pgbouncer_exporter_active.rc != 0
+
 - name: Configure optional Logstash forwarding
   ansible.builtin.template:
     src: logstash-forwarding.conf.j2
