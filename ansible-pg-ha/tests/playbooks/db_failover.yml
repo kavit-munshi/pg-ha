@@ -114,7 +114,9 @@
               - --tuples-only
               - --no-align
               - --command
-              - SELECT inet_server_addr() || '|' || pg_is_in_recovery();
+              - >-
+                SELECT host(inet_server_addr()) || '|' ||
+                CASE WHEN pg_is_in_recovery() THEN 't' ELSE 'f' END;
           environment:
             PGPASSWORD: "{{ app_db_password }}"
           delegate_to: "{{ groups['routing_nodes'][0] }}"
@@ -198,7 +200,9 @@
                   - --tuples-only
                   - --no-align
                   - --command
-                  - SELECT inet_server_addr() || '|' || pg_is_in_recovery();
+                  - >-
+                    SELECT host(inet_server_addr()) || '|' ||
+                    CASE WHEN pg_is_in_recovery() THEN 't' ELSE 'f' END;
               environment:
                 PGPASSWORD: "{{ app_db_password }}"
               delegate_to: "{{ groups['routing_nodes'][0] }}"
@@ -315,7 +319,9 @@
                   - --tuples-only
                   - --no-align
                   - --command
-                  - SELECT inet_server_addr() || '|' || pg_is_in_recovery();
+                  - >-
+                    SELECT host(inet_server_addr()) || '|' ||
+                    CASE WHEN pg_is_in_recovery() THEN 't' ELSE 'f' END;
               environment:
                 PGPASSWORD: "{{ app_db_password }}"
               delegate_to: "{{ groups['routing_nodes'][0] }}"
