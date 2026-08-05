@@ -3,9 +3,13 @@
   hosts: routing_nodes
   become: true
   gather_facts: false
-  vars_files:
-    - "{{ playbook_dir }}/../../group_vars/all.yml"
-    - "{{ playbook_dir }}/../../group_vars/{{ 'uat.yml' if 'uat' in group_names else 'prod.yml' }}"
+  pre_tasks:
+    - name: Load repository group variables
+      ansible.builtin.include_vars:
+        file: "{{ item }}"
+      loop:
+        - "{{ playbook_dir }}/../../group_vars/all.yml"
+        - "{{ playbook_dir }}/../../group_vars/{{ 'uat.yml' if 'uat' in group_names else 'prod.yml' }}"
   tasks:
     - name: Require explicit routing failover confirmation
       ansible.builtin.assert:
@@ -44,9 +48,13 @@
   hosts: routing_nodes
   become: true
   gather_facts: false
-  vars_files:
-    - "{{ playbook_dir }}/../../group_vars/all.yml"
-    - "{{ playbook_dir }}/../../group_vars/{{ 'uat.yml' if 'uat' in group_names else 'prod.yml' }}"
+  pre_tasks:
+    - name: Load repository group variables
+      ansible.builtin.include_vars:
+        file: "{{ item }}"
+      loop:
+        - "{{ playbook_dir }}/../../group_vars/all.yml"
+        - "{{ playbook_dir }}/../../group_vars/{{ 'uat.yml' if 'uat' in group_names else 'prod.yml' }}"
   tasks:
     - name: Identify original VIP owner
       ansible.builtin.set_fact:

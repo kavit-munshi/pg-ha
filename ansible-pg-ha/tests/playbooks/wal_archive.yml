@@ -3,9 +3,13 @@
   hosts: db_primary:db_standby
   become: true
   gather_facts: false
-  vars_files:
-    - "{{ playbook_dir }}/../../group_vars/all.yml"
-    - "{{ playbook_dir }}/../../group_vars/{{ 'uat.yml' if 'uat' in group_names else 'prod.yml' }}"
+  pre_tasks:
+    - name: Load repository group variables
+      ansible.builtin.include_vars:
+        file: "{{ item }}"
+      loop:
+        - "{{ playbook_dir }}/../../group_vars/all.yml"
+        - "{{ playbook_dir }}/../../group_vars/{{ 'uat.yml' if 'uat' in group_names else 'prod.yml' }}"
   tasks:
     - name: Require explicit WAL test confirmation
       ansible.builtin.assert:
@@ -34,9 +38,13 @@
   hosts: db_monitor
   become: true
   gather_facts: false
-  vars_files:
-    - "{{ playbook_dir }}/../../group_vars/all.yml"
-    - "{{ playbook_dir }}/../../group_vars/{{ 'uat.yml' if 'uat' in group_names else 'prod.yml' }}"
+  pre_tasks:
+    - name: Load repository group variables
+      ansible.builtin.include_vars:
+        file: "{{ item }}"
+      loop:
+        - "{{ playbook_dir }}/../../group_vars/all.yml"
+        - "{{ playbook_dir }}/../../group_vars/{{ 'uat.yml' if 'uat' in group_names else 'prod.yml' }}"
   tasks:
     - name: Identify current primary
       ansible.builtin.set_fact:
