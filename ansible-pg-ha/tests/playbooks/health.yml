@@ -13,8 +13,16 @@
     - name: Require common services
       ansible.builtin.assert:
         that:
-          - ansible_facts.services['chrony.service'].state == 'running'
-          - ansible_facts.services['prometheus-node-exporter.service'].state == 'running'
+          - >-
+            ansible_facts.services.get('chrony.service', {}).get('state', 'missing')
+            == 'running'
+          - >-
+            ansible_facts.services.get(
+              'prometheus-node-exporter.service', {}
+            ).get('state', 'missing') == 'running'
+        fail_msg: >-
+          Required common services are missing or stopped. Exporter units found:
+          {{ ansible_facts.services.keys() | select('search', 'exporter') | list }}
 
     - name: Check Chrony synchronization
       ansible.builtin.command:
@@ -89,7 +97,9 @@
     - name: Require rsyslog for optional Logstash forwarding
       ansible.builtin.assert:
         that:
-          - ansible_facts.services['rsyslog.service'].state == 'running'
+          - >-
+            ansible_facts.services.get('rsyslog.service', {}).get('state', 'missing')
+            == 'running'
       when: configure_logstash_forwarding | bool
 
 - name: Validate database and monitor functionality
@@ -106,8 +116,17 @@
     - name: Require database services
       ansible.builtin.assert:
         that:
-          - ansible_facts.services['pg_autoctl.service'].state == 'running'
-          - ansible_facts.services['prometheus-postgres-exporter.service'].state == 'running'
+          - >-
+            ansible_facts.services.get(
+              'pg_autoctl.service', {}
+            ).get('state', 'missing') == 'running'
+          - >-
+            ansible_facts.services.get(
+              'prometheus-postgres-exporter.service', {}
+            ).get('state', 'missing') == 'running'
+        fail_msg: >-
+          Required database services are missing or stopped. Exporter units found:
+          {{ ansible_facts.services.keys() | select('search', 'exporter') | list }}
 
     - name: Check PostgreSQL readiness
       ansible.builtin.command:
@@ -274,11 +293,27 @@
     - name: Require routing services
       ansible.builtin.assert:
         that:
-          - ansible_facts.services['pgbouncer.service'].state == 'running'
-          - ansible_facts.services['haproxy.service'].state == 'running'
-          - ansible_facts.services['keepalived.service'].state == 'running'
-          - ansible_facts.services['prometheus-pgbouncer-exporter.service'].state == 'running'
+          - >-
+            ansible_facts.services.get(
+              'pgbouncer.service', {}
+            ).get('state', 'missing') == 'running'
+          - >-
+            ansible_facts.services.get(
+              'haproxy.service', {}
+            ).get('state', 'missing') == 'running'
+          - >-
+            ansible_facts.services.get(
+              'keepalived.service', {}
+            ).get('state', 'missing') == 'running'
+          - >-
+            ansible_facts.services.get(
+              'prometheus-pgbouncer-exporter.service', {}
+            ).get('state', 'missing') == 'running'
           - keepalived_interface in ansible_facts.interfaces
+        fail_msg: >-
+          Required routing services are missing or stopped, or the Keepalived
+          interface is absent. Exporter units found:
+          {{ ansible_facts.services.keys() | select('search', 'exporter') | list }}
 
     - name: Validate Keepalived configuration
       ansible.builtin.command:

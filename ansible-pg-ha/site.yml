@@ -73,4 +73,6 @@
   hosts: all_nodes
   become: true
   roles:
-    - monitoring_agents
+    - role: monitoring_agents
+      tags:
+        - monitoring
