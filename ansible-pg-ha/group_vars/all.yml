@@ -66,9 +66,11 @@ haproxy_health_user: haproxy_check
 ufw_reset_rules: true
 ufw_ssh_allowed_cidrs:
   - any
+# Application clients enter through the routing VIP. Database-node port 5432
+# remains private to the cluster tier unless a separately reviewed direct-access
+# design also provisions matching PostgreSQL pg_hba.conf rules.
 ufw_database_allowed_cidrs:
   - "{{ cluster_cidr }}"
-  - "{{ application_client_cidr }}"
 configure_logstash_forwarding: false
 logstash_port: 514
 rubrik_rbs_enabled: false

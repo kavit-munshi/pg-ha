@@ -9,7 +9,9 @@ host_ips:
   BHC-PGBSQLU04: 192.168.129.109
 cluster_cidr: 192.168.129.0/24
 prometheus_scrape_cidr: 10.40.20.0/24
-application_client_cidr: 10.40.30.0/24
+application_client_cidrs:
+  - 10.40.30.0/24
+  - 192.168.24.0/24
 postgresql_vip: 192.168.129.110
 postgresql_vip_prefix: 24
 keepalived_interface: ens33

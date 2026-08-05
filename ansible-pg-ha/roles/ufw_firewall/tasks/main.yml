@@ -60,10 +60,11 @@
 - name: Allow application connections to HAProxy VIP
   community.general.ufw:
     rule: allow
-    from_ip: "{{ application_client_cidr }}"
+    from_ip: "{{ item }}"
     to_port: "{{ haproxy_listen_port | string }}"
     proto: tcp
     comment: Application PostgreSQL VIP
+  loop: "{{ application_client_cidrs }}"
   when: inventory_hostname in groups['routing_nodes']
 
 - name: Allow HAProxy connections to PgBouncer
