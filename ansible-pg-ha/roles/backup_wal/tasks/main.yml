@@ -150,6 +150,72 @@
   register: backup_wal_archive_public_key
   when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
 
+- name: Create dedicated WAL archive SSH authorization group on monitor
+  ansible.builtin.group:
+    name: "{{ wal_archive_ssh_group }}"
+    system: true
+    state: present
+  delegate_to: "{{ groups['db_monitor'][0] }}"
+  when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+
+- name: Add monitor PostgreSQL account to WAL archive SSH group
+  ansible.builtin.user:
+    name: postgres
+    groups:
+      - "{{ wal_archive_ssh_group }}"
+    append: true
+  delegate_to: "{{ groups['db_monitor'][0] }}"
+  when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+
+- name: Permit WAL archive SSH group through hardened monitor policy
+  ansible.builtin.copy:
+    dest: /etc/ssh/sshd_config.d/60-postgres-wal-archive.conf
+    owner: root
+    group: root
+    mode: "0600"
+    content: |
+      # Managed by Ansible. Allows key-only WAL transport to the monitor.
+      AllowGroups {{ wal_archive_ssh_group }}
+    validate: /usr/sbin/sshd -t -f %s
+  delegate_to: "{{ groups['db_monitor'][0] }}"
+  register: backup_wal_monitor_sshd_policy
+  when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+
+- name: Validate complete monitor SSH configuration
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/sshd
+      - -t
+  delegate_to: "{{ groups['db_monitor'][0] }}"
+  changed_when: false
+  when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+
+- name: Reload monitor SSH service after policy change
+  ansible.builtin.systemd:
+    name: ssh
+    state: reloaded
+  delegate_to: "{{ groups['db_monitor'][0] }}"
+  when:
+    - inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+    - backup_wal_monitor_sshd_policy.changed
+
+- name: Verify effective monitor SSH AllowGroups policy
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/sshd
+      - -T
+      - -C
+      - >-
+        user=postgres,host={{ groups['db_monitor'][0] }},addr={{ host_ips[inventory_hostname] }}
+  delegate_to: "{{ groups['db_monitor'][0] }}"
+  register: backup_wal_monitor_effective_sshd_policy
+  changed_when: false
+  failed_when: >-
+    backup_wal_monitor_effective_sshd_policy.rc != 0 or
+    ('allowgroups ' ~ wal_archive_ssh_group) not in
+    backup_wal_monitor_effective_sshd_policy.stdout_lines
+  when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+
 - name: Ensure monitor postgres SSH directory exists before key authorization
   ansible.builtin.file:
     path: /var/lib/postgresql/.ssh
@@ -164,9 +230,34 @@
   ansible.posix.authorized_key:
     user: postgres
     key: "{{ backup_wal_archive_public_key.content | b64decode }}"
+    key_options: >-
+      restrict,from="{{ host_ips[inventory_hostname] }}"
     state: present
     manage_dir: false
   delegate_to: "{{ groups['db_monitor'][0] }}"
+  when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+
+- name: Enforce monitor PostgreSQL authorized-key permissions
+  ansible.builtin.file:
+    path: /var/lib/postgresql/.ssh/authorized_keys
+    state: file
+    owner: postgres
+    group: postgres
+    mode: "0600"
+  delegate_to: "{{ groups['db_monitor'][0] }}"
+  when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+
+- name: Verify data-node WAL key is present on archive monitor
+  ansible.builtin.command:
+    argv:
+      - grep
+      - -Fq
+      - --
+      - >-
+        {{ (backup_wal_archive_public_key.content | b64decode | trim).split()[1] }}
+      - /var/lib/postgresql/.ssh/authorized_keys
+  delegate_to: "{{ groups['db_monitor'][0] }}"
+  changed_when: false
   when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
 
 - name: Scan archive monitor SSH host key
@@ -187,6 +278,31 @@
     state: present
   become: true
   become_user: postgres
+  when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+
+- name: Ensure monitor archive directory is writable by PostgreSQL
+  ansible.builtin.file:
+    path: "{{ wal_archive_path }}"
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: "0750"
+  delegate_to: "{{ groups['db_monitor'][0] }}"
+  when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+
+- name: Verify noninteractive WAL archive SSH transport
+  ansible.builtin.command:
+    argv:
+      - ssh
+      - -i
+      - /var/lib/postgresql/.ssh/id_ed25519_wal_archive
+      - -o
+      - BatchMode=yes
+      - "postgres@{{ host_ips[groups['db_monitor'][0]] }}"
+      - "test -w {{ wal_archive_path }}"
+  become: true
+  become_user: postgres
+  changed_when: false
   when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
 
 - name: Install WAL archive helper
