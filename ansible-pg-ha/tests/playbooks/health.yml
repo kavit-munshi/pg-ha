@@ -3,6 +3,9 @@
   hosts: all_nodes
   become: true
   gather_facts: true
+  vars_files:
+    - "{{ playbook_dir }}/../../group_vars/all.yml"
+    - "{{ playbook_dir }}/../../group_vars/{{ 'uat.yml' if 'uat' in group_names else 'prod.yml' }}"
   tasks:
     - name: Collect service state
       ansible.builtin.service_facts:
@@ -93,6 +96,9 @@
   hosts: db_cluster
   become: true
   gather_facts: false
+  vars_files:
+    - "{{ playbook_dir }}/../../group_vars/all.yml"
+    - "{{ playbook_dir }}/../../group_vars/{{ 'uat.yml' if 'uat' in group_names else 'prod.yml' }}"
   tasks:
     - name: Collect database service state
       ansible.builtin.service_facts:
@@ -258,6 +264,9 @@
   hosts: routing_nodes
   become: true
   gather_facts: true
+  vars_files:
+    - "{{ playbook_dir }}/../../group_vars/all.yml"
+    - "{{ playbook_dir }}/../../group_vars/{{ 'uat.yml' if 'uat' in group_names else 'prod.yml' }}"
   tasks:
     - name: Collect routing service state
       ansible.builtin.service_facts:

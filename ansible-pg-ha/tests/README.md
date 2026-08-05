@@ -2,6 +2,10 @@
 
 Run these tests from the Ansible control server after `site.yml` completes.
 They use the repository inventory and variables, including vaulted passwords.
+Each test play explicitly loads `group_vars/all.yml` plus `uat.yml` or
+`prod.yml` based on inventory group membership. This is required because the
+playbooks live below `tests/playbooks`; without it Ansible would default SSH to
+the control-node username instead of the configured `ansible` account.
 
 ## Prerequisites
 
