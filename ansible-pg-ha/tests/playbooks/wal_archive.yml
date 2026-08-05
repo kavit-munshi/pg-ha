@@ -62,6 +62,26 @@
             map(attribute='stdout') | map('trim') |
             select('equalto', 'f') | list | length == 1
 
+    - name: Generate WAL activity before switching segments
+      ansible.builtin.command:
+        argv:
+          - "/usr/lib/postgresql/{{ postgresql_version }}/bin/psql"
+          - --no-psqlrc
+          - --tuples-only
+          - --no-align
+          - --dbname
+          - postgres
+          - --command
+          - >-
+            SELECT pg_create_restore_point(
+              'ansible_wal_archive_test_' ||
+              to_char(clock_timestamp(), 'YYYYMMDDHH24MISSUS')
+            );
+      become: true
+      become_user: postgres
+      delegate_to: "{{ test_wal_primary }}"
+      changed_when: true
+
     - name: Switch WAL on current primary
       ansible.builtin.command:
         argv:
