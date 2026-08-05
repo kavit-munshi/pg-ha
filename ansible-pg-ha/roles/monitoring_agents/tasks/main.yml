@@ -69,14 +69,14 @@
 - name: Verify Prometheus Community PgBouncer exporter binary
   ansible.builtin.stat:
     path: "{{ pgbouncer_exporter_bin }}"
-  register: monitoring_pgbouncer_exporter_binary
+  register: monitoring_agents_pgbouncer_exporter_binary
   when: inventory_hostname in groups['routing_nodes']
 
 - name: Require Prometheus Community PgBouncer exporter binary
   ansible.builtin.assert:
     that:
-      - monitoring_pgbouncer_exporter_binary.stat.exists
-      - monitoring_pgbouncer_exporter_binary.stat.executable
+      - monitoring_agents_pgbouncer_exporter_binary.stat.exists
+      - monitoring_agents_pgbouncer_exporter_binary.stat.executable
     fail_msg: >-
       Package {{ pgbouncer_exporter_package }} did not install the expected
       executable {{ pgbouncer_exporter_bin }}.
@@ -146,12 +146,12 @@
       - systemctl
       - is-active
       - prometheus-pgbouncer-exporter.service
-  register: monitoring_pgbouncer_exporter_active
+  register: monitoring_agents_pgbouncer_exporter_active
   changed_when: false
   failed_when: false
   retries: 5
   delay: 2
-  until: monitoring_pgbouncer_exporter_active.rc == 0
+  until: monitoring_agents_pgbouncer_exporter_active.rc == 0
   when: inventory_hostname in groups['routing_nodes']
 
 - name: Read PgBouncer exporter journal after startup failure
@@ -163,20 +163,20 @@
       - --lines
       - "100"
       - --no-pager
-  register: monitoring_pgbouncer_exporter_journal
+  register: monitoring_agents_pgbouncer_exporter_journal
   changed_when: false
   when:
     - inventory_hostname in groups['routing_nodes']
-    - monitoring_pgbouncer_exporter_active.rc != 0
+    - monitoring_agents_pgbouncer_exporter_active.rc != 0
 
 - name: Report PgBouncer exporter startup failure
   ansible.builtin.fail:
     msg: |-
       prometheus-pgbouncer-exporter did not remain active. Recent journal:
-      {{ monitoring_pgbouncer_exporter_journal.stdout }}
+      {{ monitoring_agents_pgbouncer_exporter_journal.stdout }}
   when:
     - inventory_hostname in groups['routing_nodes']
-    - monitoring_pgbouncer_exporter_active.rc != 0
+    - monitoring_agents_pgbouncer_exporter_active.rc != 0
 
 - name: Configure optional Logstash forwarding
   ansible.builtin.template:
