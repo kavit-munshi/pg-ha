@@ -9,7 +9,8 @@ host_ips:
   BHC-PGBSQLU04: 10.50.10.64
 cluster_cidr: 10.50.10.0/24
 prometheus_scrape_cidr: 10.50.20.0/24
-application_client_cidr: 10.50.30.0/24
+application_client_cidrs:
+  - 10.50.30.0/24
 postgresql_vip: 10.50.10.50
 postgresql_vip_prefix: 24
 # Confirm the Production VIP-facing interface before deployment.

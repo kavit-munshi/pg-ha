@@ -296,7 +296,7 @@ entries.
 - `host_ips`;
 - `cluster_cidr`;
 - `prometheus_scrape_cidr`;
-- `application_client_cidr`;
+- `application_client_cidrs`;
 - PostgreSQL VIP and prefix;
 - Logstash address;
 - environment NTP sources;
@@ -396,7 +396,7 @@ verbose status.
 | All nodes | 9100/tcp | `metrics_allowed_cidr` |
 | DB cluster | 5432/tcp | `ufw_database_allowed_cidrs` |
 | DB cluster | 9187/tcp | `metrics_allowed_cidr` |
-| Routing | 5432/tcp | `application_client_cidr` |
+| Routing | 5432/tcp | each entry in `application_client_cidrs` |
 | Routing | 6432/tcp | `cluster_cidr` |
 | Routing | 9127/tcp | `metrics_allowed_cidr` |
 | Routing | VRRP/112 | other router IP only |

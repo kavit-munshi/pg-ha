@@ -131,7 +131,7 @@ Verify or replace:
 - every host IP in `host_ips`;
 - `cluster_cidr`;
 - `prometheus_scrape_cidr`;
-- `application_client_cidr`;
+- every approved subnet in `application_client_cidrs`;
 - `postgresql_vip` and `postgresql_vip_prefix`;
 - `logstash_ip`;
 - `ntp_servers`.
@@ -535,7 +535,7 @@ authentication error.
 
 ### 8.9 Test the complete VIP connection path
 
-Run this from a host inside `application_client_cidr`:
+Run this from a host inside one of the `application_client_cidrs`:
 
 ```bash
 read -rsp "Application database password: " PGPASSWORD
