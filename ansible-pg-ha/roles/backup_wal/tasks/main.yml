@@ -198,22 +198,52 @@
     mode: "0750"
   when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
 
-- name: Install WAL archive PostgreSQL settings
-  ansible.builtin.template:
-    src: postgresql-archive.conf.j2
-    dest: "{{ pgdata_path }}/postgresql-archive.conf"
-    owner: postgres
-    group: postgres
-    mode: "0600"
+- name: Remove obsolete separate WAL archive settings file
+  ansible.builtin.file:
+    path: "{{ pgdata_path }}/postgresql-archive.conf"
+    state: absent
   notify: Restart pg_autoctl for archive settings
   when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
 
-- name: Include WAL archive PostgreSQL settings
+- name: Remove obsolete WAL archive include directive
   ansible.builtin.lineinfile:
     path: "{{ pgdata_path }}/postgresql.conf"
     line: "include_if_exists = 'postgresql-archive.conf'"
-    state: present
+    state: absent
   notify: Restart pg_autoctl for archive settings
+  when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+
+- name: Configure WAL archiving after pg_auto_failover includes
+  ansible.builtin.blockinfile:
+    path: "{{ pgdata_path }}/postgresql.conf"
+    marker: "# {mark} ANSIBLE MANAGED WAL ARCHIVING"
+    insertafter: EOF
+    owner: postgres
+    group: postgres
+    mode: "0600"
+    block: |
+      wal_level = replica
+      archive_mode = on
+      archive_command = '/usr/local/sbin/archive-wal "%p" "%f"'
+      archive_timeout = '300s'
+  notify: Restart pg_autoctl for archive settings
+  when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+
+- name: Validate on-disk WAL archive configuration before restart
+  ansible.builtin.command:
+    argv:
+      - "/usr/lib/postgresql/{{ postgresql_version }}/bin/postgres"
+      - -D
+      - "{{ pgdata_path }}"
+      - -C
+      - archive_mode
+  become: true
+  become_user: postgres
+  register: backup_wal_disk_archive_mode
+  changed_when: false
+  failed_when: >-
+    backup_wal_disk_archive_mode.rc != 0 or
+    backup_wal_disk_archive_mode.stdout | trim != 'on'
   when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
 
 - name: Apply changed WAL archive configuration

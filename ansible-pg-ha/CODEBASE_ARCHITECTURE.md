@@ -162,7 +162,6 @@ ansible-pg-ha/
         │   └── main.yml
         └── templates/
             ├── archive-wal.sh.j2
-            ├── postgresql-archive.conf.j2
             └── rubrik-rbs-hook.sh.j2
 ```
 
@@ -754,7 +753,8 @@ The archive script:
 - atomically renames the remote file;
 - optionally invokes the Rubrik hook.
 
-`postgresql-archive.conf.j2` sets:
+The role appends a marked Ansible-managed block to `postgresql.conf`, after
+pg_auto_failover's includes, containing:
 
 ```text
 wal_level = replica
@@ -816,7 +816,7 @@ the single owner of inbound rules.
 | `/etc/security/limits.conf` managed blocks | `os_tuning` |
 | `/etc/systemd/system/pg_autoctl.service` | `pg_auto_failover` |
 | `/pgdata/pgroot/data/postgresql-ha.conf` | `pg_auto_failover` |
-| `/pgdata/pgroot/data/postgresql-archive.conf` | `backup_wal` |
+| `/pgdata/pgroot/data/postgresql.conf` WAL archive block | `backup_wal` |
 | `/usr/local/sbin/archive-wal` | `backup_wal` |
 | `/usr/local/sbin/rubrik-rbs-wal-hook` | `backup_wal` |
 | `/etc/pgbouncer/pgbouncer.ini` | `pgbouncer` |
