@@ -741,10 +741,13 @@ On U05/U06:
 
 1. creates `/var/lib/postgresql/.ssh`;
 2. generates a dedicated Ed25519 archive key;
-3. reads the public key;
-4. delegates authorization to U07;
-5. scans and pins U07's SSH host key;
-6. installs `/usr/local/sbin/archive-wal`.
+3. creates the dedicated `postgres-wal-ssh` authorization group on U07;
+4. adds U07's `postgres` account to that group and permits the group through
+   the hardened SSH `AllowGroups` policy;
+5. delegates each public key to U07, restricted to its originating SQL-node IP;
+6. verifies both key presence and noninteractive archive-directory access;
+7. scans and pins U07's SSH host key;
+8. installs `/usr/local/sbin/archive-wal`.
 
 The archive script:
 
@@ -907,8 +910,8 @@ Boundaries requiring operational treatment:
 - `sslmode=require` encrypts but does not verify an enterprise CA identity;
 - PgBouncer userlist currently contains protected plaintext passwords;
 - `host_key_checking=False` weakens Ansible SSH identity validation;
-- WAL archive authorization gives the database hosts SSH access as `postgres`
-  on U07;
+- WAL archive authorization gives U05/U06 source-restricted, key-only SSH
+  access as `postgres` on U07 through the dedicated `postgres-wal-ssh` group;
 - Keepalived PASS is limited by VRRP to eight characters;
 - UFW SSH defaults to `any` until operators restrict it;
 - secret safety depends on actual Vault use and repository hygiene.
