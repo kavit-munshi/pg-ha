@@ -72,6 +72,54 @@
               difference([test_routing_original_owner]) | first) }}
       run_once: true  # noqa: run-once[task]
 
+    - name: Verify baseline VIP listener before disruption
+      ansible.builtin.wait_for:
+        host: "{{ postgresql_vip }}"
+        port: "{{ haproxy_listen_port }}"
+        state: started
+        connect_timeout: 2
+        timeout: 30
+      delegate_to: "{{ test_routing_original_owner }}"
+      run_once: true  # noqa: run-once[task]
+
+    - name: Query baseline SQL through VIP before disruption
+      ansible.builtin.command:
+        argv:
+          - psql
+          - --host
+          - "{{ postgresql_vip }}"
+          - --port
+          - "{{ haproxy_listen_port | string }}"
+          - --username
+          - "{{ app_db_user }}"
+          - --dbname
+          - "{{ app_database }}"
+          - --no-psqlrc
+          - --tuples-only
+          - --no-align
+          - --command
+          - SELECT pg_is_in_recovery();
+      environment:
+        PGPASSWORD: "{{ app_db_password }}"
+      delegate_to: "{{ test_routing_original_owner }}"
+      register: test_routing_baseline_sql
+      changed_when: false
+      failed_when: false
+      no_log: true
+      run_once: true  # noqa: run-once[task]
+
+    - name: Require working baseline SQL before disruption
+      ansible.builtin.assert:
+        that:
+          - test_routing_baseline_sql.rc == 0
+          - test_routing_baseline_sql.stdout | trim == 'f'
+        fail_msg: |-
+          Baseline SQL through the VIP is already unhealthy; failover was not started.
+          rc={{ test_routing_baseline_sql.rc }}
+          stdout={{ test_routing_baseline_sql.stdout | trim }}
+          stderr={{ test_routing_baseline_sql.stderr | trim }}
+      run_once: true  # noqa: run-once[task]
+
     - name: Execute routing failover test
       run_once: true  # noqa: run-once[task]
       block:
@@ -99,6 +147,15 @@
           until: postgresql_vip in test_routing_failover_target_addresses.stdout
 
         - name: Verify SQL through failed-over VIP
+          ansible.builtin.wait_for:
+            host: "{{ postgresql_vip }}"
+            port: "{{ haproxy_listen_port }}"
+            state: started
+            connect_timeout: 2
+            timeout: 30
+          delegate_to: "{{ test_routing_failover_target }}"
+
+        - name: Query SQL through failed-over VIP
           ansible.builtin.command:
             argv:
               - psql
@@ -121,7 +178,18 @@
           register: test_routing_failover_sql
           changed_when: false
           no_log: true
-          failed_when: test_routing_failover_sql.stdout | trim != 'f'
+          failed_when: false
+
+        - name: Report sanitized failed-over VIP SQL failure
+          ansible.builtin.fail:
+            msg: |-
+              SQL through the failed-over VIP did not reach a writable database.
+              rc={{ test_routing_failover_sql.rc }}
+              stdout={{ test_routing_failover_sql.stdout | trim }}
+              stderr={{ test_routing_failover_sql.stderr | trim }}
+          when: >-
+            test_routing_failover_sql.rc != 0 or
+            test_routing_failover_sql.stdout | trim != 'f'
       always:
         - name: Restore Keepalived on original VIP owner
           ansible.builtin.systemd:
@@ -147,7 +215,16 @@
           delay: 2
           until: postgresql_vip in test_routing_restored_addresses.stdout
 
-        - name: Verify SQL after routing topology restoration
+        - name: Wait for SQL listener after routing topology restoration
+          ansible.builtin.wait_for:
+            host: "{{ postgresql_vip }}"
+            port: "{{ haproxy_listen_port }}"
+            state: started
+            connect_timeout: 2
+            timeout: 30
+          delegate_to: "{{ test_routing_original_owner }}"
+
+        - name: Query SQL after routing topology restoration
           ansible.builtin.command:
             argv:
               - psql
@@ -170,7 +247,18 @@
           register: test_routing_restored_sql
           changed_when: false
           no_log: true
-          failed_when: test_routing_restored_sql.stdout | trim != 'f'
+          failed_when: false
+
+        - name: Report sanitized restored VIP SQL failure
+          ansible.builtin.fail:
+            msg: |-
+              SQL through the restored VIP did not reach a writable database.
+              rc={{ test_routing_restored_sql.rc }}
+              stdout={{ test_routing_restored_sql.stdout | trim }}
+              stderr={{ test_routing_restored_sql.stderr | trim }}
+          when: >-
+            test_routing_restored_sql.rc != 0 or
+            test_routing_restored_sql.stdout | trim != 'f'
 
         - name: Report routing failover result
           ansible.builtin.debug:
