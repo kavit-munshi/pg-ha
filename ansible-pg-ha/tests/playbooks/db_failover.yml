@@ -79,32 +79,56 @@
         test_db_initial_monitor_state.stdout is not
         search('(?m)^' + test_db_promotion_target + '\s*\|.*\|\s*secondary\s*\|\s*secondary\s*$')
 
-    - name: Test SQL through VIP before database switchover
-      ansible.builtin.command:
-        argv:
-          - psql
-          - --host
-          - "{{ postgresql_vip }}"
-          - --port
-          - "{{ haproxy_listen_port | string }}"
-          - --username
-          - "{{ app_db_user }}"
-          - --dbname
-          - "{{ app_database }}"
-          - --no-psqlrc
-          - --tuples-only
-          - --no-align
-          - --command
-          - SELECT inet_server_addr() || '|' || pg_is_in_recovery();
-      environment:
-        PGPASSWORD: "{{ app_db_password }}"
+    - name: Wait for baseline VIP SQL listener
+      ansible.builtin.wait_for:
+        host: "{{ postgresql_vip }}"
+        port: "{{ haproxy_listen_port }}"
+        state: started
+        connect_timeout: 2
+        timeout: 30
       delegate_to: "{{ groups['routing_nodes'][0] }}"
-      register: test_db_sql_before
-      changed_when: false
-      no_log: true
-      failed_when: >-
-        (test_db_sql_before.stdout | trim) !=
-        (host_ips[test_db_original_primary] ~ '|f')
+
+    - name: Require working VIP SQL path before database switchover
+      block:
+        - name: Query SQL through VIP before database switchover
+          ansible.builtin.command:
+            argv:
+              - psql
+              - --host
+              - "{{ postgresql_vip }}"
+              - --port
+              - "{{ haproxy_listen_port | string }}"
+              - --username
+              - "{{ app_db_user }}"
+              - --dbname
+              - "{{ app_database }}"
+              - --no-psqlrc
+              - --tuples-only
+              - --no-align
+              - --command
+              - SELECT inet_server_addr() || '|' || pg_is_in_recovery();
+          environment:
+            PGPASSWORD: "{{ app_db_password }}"
+          delegate_to: "{{ groups['routing_nodes'][0] }}"
+          register: test_db_sql_before
+          changed_when: false
+          no_log: true
+          retries: 5
+          delay: 2
+          until:
+            - test_db_sql_before.rc == 0
+            - >-
+              (test_db_sql_before.stdout | trim) ==
+              (host_ips[test_db_original_primary] ~ '|f')
+      rescue:
+        - name: Report sanitized baseline VIP SQL failure
+          ansible.builtin.fail:
+            msg: |-
+              Baseline SQL through the VIP is unhealthy; switchover was not started.
+              Expected={{ host_ips[test_db_original_primary] }}|f
+              rc={{ test_db_sql_before.rc | default('unavailable') }}
+              stdout={{ test_db_sql_before.stdout | default('') | trim }}
+              stderr={{ test_db_sql_before.stderr | default('') | trim }}
 
     - name: Perform database failover test
       block:
@@ -149,31 +173,46 @@
               search('(?m)^' + test_db_original_primary + '\s*\|.*\|\s*secondary\s*\|\s*secondary\s*$')
 
         - name: Verify VIP routes writes to promoted primary
-          ansible.builtin.command:
-            argv:
-              - psql
-              - --host
-              - "{{ postgresql_vip }}"
-              - --port
-              - "{{ haproxy_listen_port | string }}"
-              - --username
-              - "{{ app_db_user }}"
-              - --dbname
-              - "{{ app_database }}"
-              - --no-psqlrc
-              - --tuples-only
-              - --no-align
-              - --command
-              - SELECT inet_server_addr() || '|' || pg_is_in_recovery();
-          environment:
-            PGPASSWORD: "{{ app_db_password }}"
-          delegate_to: "{{ groups['routing_nodes'][0] }}"
-          register: test_db_sql_after_failover
-          changed_when: false
-          no_log: true
-          failed_when: >-
-            (test_db_sql_after_failover.stdout | trim) !=
-            (host_ips[test_db_promotion_target] ~ '|f')
+          block:
+            - name: Query VIP after database switchover
+              ansible.builtin.command:
+                argv:
+                  - psql
+                  - --host
+                  - "{{ postgresql_vip }}"
+                  - --port
+                  - "{{ haproxy_listen_port | string }}"
+                  - --username
+                  - "{{ app_db_user }}"
+                  - --dbname
+                  - "{{ app_database }}"
+                  - --no-psqlrc
+                  - --tuples-only
+                  - --no-align
+                  - --command
+                  - SELECT inet_server_addr() || '|' || pg_is_in_recovery();
+              environment:
+                PGPASSWORD: "{{ app_db_password }}"
+              delegate_to: "{{ groups['routing_nodes'][0] }}"
+              register: test_db_sql_after_failover
+              changed_when: false
+              no_log: true
+              retries: 30
+              delay: 2
+              until:
+                - test_db_sql_after_failover.rc == 0
+                - >-
+                  (test_db_sql_after_failover.stdout | trim) ==
+                  (host_ips[test_db_promotion_target] ~ '|f')
+          rescue:
+            - name: Report sanitized promoted-primary VIP SQL failure
+              ansible.builtin.fail:
+                msg: |-
+                  VIP did not route to the promoted writable primary.
+                  Expected={{ host_ips[test_db_promotion_target] }}|f
+                  rc={{ test_db_sql_after_failover.rc | default('unavailable') }}
+                  stdout={{ test_db_sql_after_failover.stdout | default('') | trim }}
+                  stderr={{ test_db_sql_after_failover.stderr | default('') | trim }}
       always:
         - name: Wait for a stable cluster before restoration
           ansible.builtin.command:
@@ -251,31 +290,46 @@
               search('(?m)^' + test_db_promotion_target + '\s*\|.*\|\s*secondary\s*\|\s*secondary\s*$')
 
         - name: Verify VIP routes writes to restored original primary
-          ansible.builtin.command:
-            argv:
-              - psql
-              - --host
-              - "{{ postgresql_vip }}"
-              - --port
-              - "{{ haproxy_listen_port | string }}"
-              - --username
-              - "{{ app_db_user }}"
-              - --dbname
-              - "{{ app_database }}"
-              - --no-psqlrc
-              - --tuples-only
-              - --no-align
-              - --command
-              - SELECT inet_server_addr() || '|' || pg_is_in_recovery();
-          environment:
-            PGPASSWORD: "{{ app_db_password }}"
-          delegate_to: "{{ groups['routing_nodes'][0] }}"
-          register: test_db_sql_restored
-          changed_when: false
-          no_log: true
-          failed_when: >-
-            (test_db_sql_restored.stdout | trim) !=
-            (host_ips[test_db_original_primary] ~ '|f')
+          block:
+            - name: Query VIP after database topology restoration
+              ansible.builtin.command:
+                argv:
+                  - psql
+                  - --host
+                  - "{{ postgresql_vip }}"
+                  - --port
+                  - "{{ haproxy_listen_port | string }}"
+                  - --username
+                  - "{{ app_db_user }}"
+                  - --dbname
+                  - "{{ app_database }}"
+                  - --no-psqlrc
+                  - --tuples-only
+                  - --no-align
+                  - --command
+                  - SELECT inet_server_addr() || '|' || pg_is_in_recovery();
+              environment:
+                PGPASSWORD: "{{ app_db_password }}"
+              delegate_to: "{{ groups['routing_nodes'][0] }}"
+              register: test_db_sql_restored
+              changed_when: false
+              no_log: true
+              retries: 30
+              delay: 2
+              until:
+                - test_db_sql_restored.rc == 0
+                - >-
+                  (test_db_sql_restored.stdout | trim) ==
+                  (host_ips[test_db_original_primary] ~ '|f')
+          rescue:
+            - name: Report sanitized restored-primary VIP SQL failure
+              ansible.builtin.fail:
+                msg: |-
+                  VIP did not return to the restored writable primary.
+                  Expected={{ host_ips[test_db_original_primary] }}|f
+                  rc={{ test_db_sql_restored.rc | default('unavailable') }}
+                  stdout={{ test_db_sql_restored.stdout | default('') | trim }}
+                  stderr={{ test_db_sql_restored.stderr | default('') | trim }}
 
         - name: Report database failover result
           ansible.builtin.debug:
