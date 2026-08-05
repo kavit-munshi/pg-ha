@@ -68,8 +68,14 @@
   hosts: routing_nodes
   become: true
   roles:
-    - pgbouncer
-    - keepalived_haproxy
+    - role: pgbouncer
+      tags:
+        - pgbouncer
+        - routing
+    - role: keepalived_haproxy
+      tags:
+        - keepalived_haproxy
+        - routing
 
 - name: Install monitoring agents
   hosts: all_nodes
