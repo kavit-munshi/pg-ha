@@ -22,6 +22,7 @@
           - postgres
           - --command
           - SELECT pg_is_in_recovery();
+      become: true
       become_user: postgres
       register: test_wal_recovery_state
       changed_when: false
@@ -58,6 +59,7 @@
           - postgres
           - --command
           - SELECT pg_walfile_name(pg_switch_wal());
+      become: true
       become_user: postgres
       delegate_to: "{{ test_wal_primary }}"
       register: test_wal_segment

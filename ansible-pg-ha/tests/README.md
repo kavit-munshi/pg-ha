@@ -26,7 +26,7 @@ ansible-playbook -i "$INVENTORY" --syntax-check tests/playbooks/health.yml
 ansible-playbook -i "$INVENTORY" --syntax-check tests/playbooks/wal_archive.yml
 ansible-playbook -i "$INVENTORY" --syntax-check tests/playbooks/routing_failover.yml
 ansible-playbook -i "$INVENTORY" --syntax-check tests/playbooks/db_failover.yml
-ansible-lint tests
+ansible-lint --project-dir . tests
 ```
 
 ## Read-only comprehensive health test
