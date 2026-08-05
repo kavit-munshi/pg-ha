@@ -249,6 +249,23 @@
 - name: Apply changed WAL archive configuration
   ansible.builtin.meta: flush_handlers
 
+- name: Wait for PostgreSQL after applying changed archive configuration
+  ansible.builtin.command:
+    argv:
+      - "/usr/lib/postgresql/{{ postgresql_version }}/bin/pg_isready"
+      - -h
+      - /var/run/postgresql
+      - -p
+      - "{{ postgresql_port | string }}"
+  become: true
+  become_user: postgres
+  register: backup_wal_after_handler_ready
+  changed_when: false
+  until: backup_wal_after_handler_ready.rc == 0
+  retries: 60
+  delay: 2
+  when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+
 - name: Read effective WAL archive settings
   ansible.builtin.command:
     argv:
@@ -294,7 +311,11 @@
   until: backup_wal_post_restart_ready.rc == 0
   retries: 30
   delay: 2
-  when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+  when:
+    - inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+    - >-
+      not (backup_wal_effective_settings.stdout | trim).startswith('replica|on|') or
+      'archive-wal' not in backup_wal_effective_settings.stdout
 
 - name: Verify active WAL archive settings
   ansible.builtin.command:
