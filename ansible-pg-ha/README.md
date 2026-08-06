@@ -17,6 +17,9 @@ Documentation:
   for repository structure, roles, variables, and execution logic
 - [OPERATOR_RUNBOOK.md](OPERATOR_RUNBOOK.md) — original concise operator
   runbook
+- [UAT_ENVIRONMENT_HANDOVER.md](UAT_ENVIRONMENT_HANDOVER.md) — complete client
+  handover covering the deployed platform, access, operations, controls,
+  acceptance evidence, responsibilities, and open items
 - [tests/README.md](tests/README.md) — comprehensive health, WAL archive,
   routing failover, and PostgreSQL switchover test procedures
 
