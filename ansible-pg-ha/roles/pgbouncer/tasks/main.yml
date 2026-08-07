@@ -40,10 +40,19 @@
     path: /etc/pgbouncer/pgbouncer.csr
     privatekey_path: /etc/pgbouncer/pgbouncer.key
     common_name: "{{ postgresql_vip }}"
-    subject_alt_name:
-      - "IP:{{ postgresql_vip }}"
-      - "IP:{{ host_ips[inventory_hostname] }}"
-      - "DNS:{{ inventory_hostname }}"
+    subject_alt_name: >-
+      {{
+        [
+          'IP:' ~ postgresql_vip,
+          'IP:' ~ host_ips[inventory_hostname],
+          'DNS:' ~ inventory_hostname
+        ]
+        + (
+          ['DNS:' ~ postgresql_vip_hostname]
+          if postgresql_vip_hostname | length > 0
+          else []
+        )
+      }}
     owner: pgbouncer
     group: pgbouncer
     mode: "0640"

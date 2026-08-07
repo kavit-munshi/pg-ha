@@ -1,30 +1,47 @@
 ---
 deployment_environment: prod
+# Production storage is reported as pre-provisioned only after the storage team
+# confirms every LVM, XFS, mount, and fstab entry. Keep false to prevent Ansible
+# from repartitioning disks during the initial Production deployment.
 storage_lvm_enabled: false
 host_ips:
-  BHC-QMSSQLU05: 10.50.10.55
-  BHC-QMSSQLU06: 10.50.10.56
-  BHC-QMSSQLU07: 10.50.10.57
-  BHC-PGBSQLU03: 10.50.10.63
-  BHC-PGBSQLU04: 10.50.10.64
-cluster_cidr: 10.50.10.0/24
-prometheus_scrape_cidr: 10.50.20.0/24
-application_client_cidrs:
-  - 10.50.30.0/24
-postgresql_vip: 10.50.10.50
-postgresql_vip_prefix: 24
-# Confirm the Production VIP-facing interface before deployment.
-keepalived_interface: ens192
-logstash_ip: 10.50.20.20
+  BHC-QMSSQLP01.bayshore.ca: 192.168.128.134
+  BHC-QMSSQLP02.bayshore.ca: 192.168.128.135
+  BHC-QMSSQLP03.bayshore.ca: 192.168.128.136
+  BHC-PGBSQLP01: 192.168.128.137
+  BHC-PGBSQLP02: 192.168.128.138
+cluster_cidr: 192.168.128.0/24
 
-# Prefer enterprise NTP names here when they are available in Production.
+# Central Prometheus is external to all_nodes. The repository installs and
+# permits exporters but does not install the Prometheus server itself.
+prometheus_server_hostname: BHC-PGMSQLP01
+prometheus_server_ip: 192.168.128.140
+prometheus_scrape_cidr: 192.168.128.140/32
+
+application_client_cidrs:
+  - 192.168.4.0/24
+postgresql_vip_hostname: PGBQMSLSP01
+postgresql_vip: 192.168.128.139
+postgresql_vip_prefix: 24
+
+# REQUIRED: replace after confirming the interface that owns 192.168.128.137
+# and 192.168.128.138 on both routing servers (for example ens33 or ens192).
+keepalived_interface: CHANGE_ME
+
+# Logstash forwarding remains disabled in group_vars/all.yml. Replace this only
+# if a Production Logstash endpoint is approved and forwarding is enabled.
+logstash_ip: CHANGE_ME
+
+# REQUIRED REVIEW: replace with approved internal Production NTP sources when
+# outbound access to the regional pools is unavailable or prohibited.
 ntp_servers:
   - 0.ca.pool.ntp.org
   - 1.ca.pool.ntp.org
   - 2.ca.pool.ntp.org
   - 3.ca.pool.ntp.org
 
-# Override these with ansible-vault encrypt_string or an encrypted vars file.
+# REQUIRED: replace every guard value with a unique Production secret using
+# ansible-vault encrypt_string or an encrypted Production vars file.
 pg_auto_failover_monitor_password: CHANGE_ME
 pg_auto_failover_replication_password: CHANGE_ME
 app_db_password: CHANGE_ME

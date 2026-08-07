@@ -74,6 +74,9 @@
       {% for host in groups['all_nodes'] %}
       {{ host_ips[host] }} {{ host }}
       {% endfor %}
+      {% if postgresql_vip_hostname | default('') | length > 0 %}
+      {{ postgresql_vip }} {{ postgresql_vip_hostname }}
+      {% endif %}
 
 - name: Apply database and routing sysctl settings
   ansible.posix.sysctl:
