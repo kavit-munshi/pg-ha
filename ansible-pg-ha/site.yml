@@ -14,6 +14,16 @@
           - application_client_cidrs | length >= 1
           - "'any' not in application_client_cidrs"
           - "'0.0.0.0/0' not in application_client_cidrs"
+          - postgresql_vip | length > 0
+          - prometheus_scrape_cidr | length > 0
+          - keepalived_interface | length > 0
+          - keepalived_interface != "CHANGE_ME"
+          - >-
+            deployment_environment != 'prod' or
+            postgresql_vip_hostname | length > 0
+          - >-
+            not (configure_logstash_forwarding | bool) or
+            logstash_ip != "CHANGE_ME"
           - ntp_servers | length >= 1
           - pg_auto_failover_monitor_password != "CHANGE_ME"
           - pg_auto_failover_replication_password != "CHANGE_ME"
@@ -22,9 +32,10 @@
           - haproxy_health_password != "CHANGE_ME"
           - keepalived_auth_pass != "CHANGE_ME"
         fail_msg: >-
-          Replace all CHANGE_ME values (preferably with Ansible Vault) and verify
-          that each inventory ansible_host exactly matches its host_ips entry
-          before deployment.
+          Replace all required CHANGE_ME values (preferably with Ansible Vault),
+          confirm the VIP/interface/NTP/client/monitoring inputs, and verify that
+          every inventory ansible_host exactly matches its host_ips entry before
+          deployment.
 
 - name: Prepare operating systems, time synchronization, and storage
   hosts: all_nodes
