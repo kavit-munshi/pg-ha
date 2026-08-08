@@ -314,34 +314,24 @@
     mode: "0750"
   when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
 
-- name: Remove obsolete separate WAL archive settings file
-  ansible.builtin.file:
-    path: "{{ pgdata_path }}/postgresql-archive.conf"
-    state: absent
-  notify: Restart pg_autoctl for archive settings
-  when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
-
-- name: Remove obsolete WAL archive include directive
+- name: Include durable WAL archive configuration
   ansible.builtin.lineinfile:
-    path: "{{ pgdata_path }}/postgresql.conf"
+    path: "{{ pgdata_path }}/postgresql-ha.conf"
     line: "include_if_exists = 'postgresql-archive.conf'"
-    state: absent
-  notify: Restart pg_autoctl for archive settings
-  when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
-
-- name: Configure WAL archiving after pg_auto_failover includes
-  ansible.builtin.blockinfile:
-    path: "{{ pgdata_path }}/postgresql.conf"
-    marker: "# {mark} ANSIBLE MANAGED WAL ARCHIVING"
-    insertafter: EOF
+    state: present
     owner: postgres
     group: postgres
     mode: "0600"
-    block: |
-      wal_level = replica
-      archive_mode = on
-      archive_command = '/usr/local/sbin/archive-wal "%p" "%f"'
-      archive_timeout = '300s'
+  notify: Restart pg_autoctl for archive settings
+  when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+
+- name: Deploy durable PostgreSQL WAL archive configuration
+  ansible.builtin.template:
+    src: postgresql-archive.conf.j2
+    dest: "{{ pgdata_path }}/postgresql-archive.conf"
+    owner: postgres
+    group: postgres
+    mode: "0600"
   notify: Restart pg_autoctl for archive settings
   when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
 
