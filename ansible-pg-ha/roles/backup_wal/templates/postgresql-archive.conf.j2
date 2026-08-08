@@ -1,0 +1,5 @@
+# Managed by Ansible. PostgreSQL WAL archive configuration.
+wal_level = replica
+archive_mode = on
+archive_command = '/usr/local/sbin/archive-wal "%p" "%f"'
+archive_timeout = '300s'

@@ -15,3 +15,7 @@ ssl = on
 password_encryption = 'scram-sha-256'
 hot_standby = on
 synchronous_commit = on
+
+# Load settings managed by the backup_wal role from a file that pg_autoctl
+# does not regenerate during PostgreSQL state transitions.
+include_if_exists = 'postgresql-archive.conf'
