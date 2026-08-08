@@ -30,15 +30,34 @@ The deployment creates:
 > filesystem. Existing hosts using the legacy mounted-PGDATA layout require an
 > approved offline migration before this deployment is run.
 
-## 1. Know the five hosts
+## 1. Know the hosts
 
-| Host | Role | Hardware | Main services |
-|---|---|---:|---|
-| `BHC-QMSSQLU05` | Initial database primary | 16 vCPU, 32 GB RAM, ~700 GB | PostgreSQL 18, pg_auto_failover |
-| `BHC-QMSSQLU06` | Database standby | 16 vCPU, 32 GB RAM, ~700 GB | PostgreSQL 18, pg_auto_failover |
-| `BHC-QMSSQLU07` | Monitor and WAL archive | 8 vCPU, 16 GB RAM, ~1.1 TB | Monitor PostgreSQL, pg_auto_failover, archive |
-| `BHC-PGBSQLU03` | Routing node 1 | 8 vCPU, 16 GB RAM, ~160 GB | Keepalived MASTER, HAProxy, PgBouncer |
-| `BHC-PGBSQLU04` | Routing node 2 | 8 vCPU, 16 GB RAM, ~160 GB | Keepalived BACKUP, HAProxy, PgBouncer |
+### UAT
+
+| Host | IP | Role | Main services |
+|---|---|---|---|
+| `BHC-QMSSQLU05` | `192.168.129.105` | Initial database primary | PostgreSQL 18, pg_auto_failover |
+| `BHC-QMSSQLU06` | `192.168.129.106` | Database standby | PostgreSQL 18, pg_auto_failover |
+| `BHC-QMSSQLU07` | `192.168.129.107` | Monitor and WAL archive | Monitor PostgreSQL, pg_auto_failover, archive |
+| `BHC-PGBSQLU03` | `192.168.129.108` | Routing node 1 | Keepalived MASTER, HAProxy, PgBouncer |
+| `BHC-PGBSQLU04` | `192.168.129.109` | Routing node 2 | Keepalived BACKUP, HAProxy, PgBouncer |
+
+UAT uses VIP `192.168.129.110/24`, cluster CIDR `192.168.129.0/24`, and
+application CIDR `192.168.24.0/24`.
+
+### Production
+
+| Host | IP | Role | Main services |
+|---|---|---|---|
+| `BHC-QMSSQLP01.bayshore.ca` | `192.168.128.134` | Initial database primary | PostgreSQL 18, pg_auto_failover |
+| `BHC-QMSSQLP02.bayshore.ca` | `192.168.128.135` | Database standby | PostgreSQL 18, pg_auto_failover |
+| `BHC-QMSSQLP03.bayshore.ca` | `192.168.128.136` | Monitor and WAL archive | Monitor PostgreSQL, pg_auto_failover, archive |
+| `BHC-PGBSQLP01.bayshore.ca` | `192.168.128.137` | Routing node 1 | Keepalived MASTER, HAProxy, PgBouncer |
+| `BHC-PGBSQLP02.bayshore.ca` | `192.168.128.138` | Routing node 2 | Keepalived BACKUP, HAProxy, PgBouncer |
+
+Production uses VIP/DNS `PGBQMSLSP01` (`192.168.128.139/24`), cluster CIDR
+`192.168.128.0/24`, application CIDR `192.168.4.0/24`, and external Prometheus
+server `BHC-PGMSQLP01` (`192.168.128.140`).
 
 All hosts must already have:
 
@@ -136,6 +155,17 @@ Verify or replace:
 - `logstash_ip`;
 - `ntp_servers`.
 
+The repository's current environment network matrix is:
+
+| Setting | UAT | Production |
+|---|---|---|
+| Inventory | `inventories/uat_hosts.ini` | `inventories/prod_hosts.ini` |
+| Cluster CIDR | `192.168.129.0/24` | `192.168.128.0/24` |
+| Application CIDR | `192.168.24.0/24` | `192.168.4.0/24` |
+| VIP | `192.168.129.110/24` | `192.168.128.139/24` |
+| VIP DNS | Not defined | `PGBQMSLSP01` |
+| Prometheus source | `192.168.129.0/24` | `192.168.128.140/32` |
+
 The `ansible_host` address and the corresponding `host_ips` value must match.
 The former controls Ansible SSH connections; the latter is installed in the
 managed PostgreSQL HA block in `/etc/hosts` on all five servers.
@@ -148,7 +178,7 @@ The inventory choice controls which environment group variables Ansible loads:
 ### 3.2 Review common settings
 
 ```bash
-ssh 
+nano group_vars/all.yml
 ```
 
 Confirm at least:
@@ -219,6 +249,10 @@ Test that the inventory resolves correctly:
 ansible-inventory -i inventories/uat_hosts.ini --graph
 ansible-inventory -i inventories/uat_hosts.ini --host BHC-QMSSQLU05 \
   --ask-vault-pass
+
+ansible-inventory -i inventories/prod_hosts.ini --graph
+ansible-inventory -i inventories/prod_hosts.ini \
+  --host BHC-QMSSQLP01.bayshore.ca --ask-vault-pass
 ```
 
 ## 4. Step 1 — Push the SSH public key
@@ -272,23 +306,31 @@ Do not continue until all five hosts return `pong`.
 
 ## 5. Verify disks and networking before formatting anything
 
-Run read-only checks against UAT:
+Select UAT or Production and run read-only checks:
 
 ```bash
-ansible all -i inventories/uat_hosts.ini -b -m command \
+# UAT
+export INVENTORY="$PWD/inventories/uat_hosts.ini"
+
+# Production (use this instead for Production)
+export INVENTORY="$PWD/inventories/prod_hosts.ini"
+
+ansible-inventory -i "$INVENTORY" --graph
+
+ansible all -i "$INVENTORY" -b -m command \
   -a "lsblk -e7 -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINTS"
 
-ansible all -i inventories/uat_hosts.ini -b -m command \
+ansible all -i "$INVENTORY" -b -m command \
   -a "ip -brief link"
 ```
 
 Confirm:
 
-| Hosts | Required data disks |
-|---|---|
-| U05 and U06 | `/dev/sdb`, at least 660 GiB usable |
-| U07 | `/dev/sdb`, at least 400 GiB, and `/dev/sdc`, at least 660 GiB |
-| U03 and U04 | `/dev/sdb`, at least 120 GiB |
+| Inventory group | UAT hosts | Production hosts | Required data disks |
+|---|---|---|---|
+| `db_primary`, `db_standby` | U05, U06 | P01, P02 | `/dev/sdb`, at least 660 GiB usable |
+| `db_monitor` | U07 | P03 | archive disk plus database LVM disk according to environment device variables; deployed Production archive is `/dev/sdc1` |
+| `routing_nodes` | U03, U04 | routing P01, P02 | `/dev/sdb`, at least 120 GiB |
 
 Also confirm:
 
@@ -300,7 +342,9 @@ Also confirm:
 - routing peers can exchange VRRP protocol 112;
 - the configured VIP is unused.
 
-Repeat these checks with the Production inventory before Production deployment.
+Production storage is pre-provisioned and must be inspected rather than
+reformatted. In the deployed Production monitor, the 405 GB archive filesystem
+is `/dev/sdc1` mounted at `/pgdata/WalArchive`.
 
 ## 6. Step 2 — Deploy UAT
 
@@ -334,9 +378,9 @@ speed, disk speed, DNS, and PostgreSQL initialization can change this estimate.
 | Up to 3 minutes | Each node reaches Chrony `Leap status: Normal` |
 | 3–10 minutes | GPT partitions, LVM, XFS filesystems, persistent mounts |
 | 5–20 minutes | PGDG packages and PostgreSQL 18 installed on database hosts |
-| 1–5 minutes | Monitor created on U07 |
-| 2–10 minutes | Initial primary registered on U05 |
-| 2–20 minutes | U06 clones and joins as standby |
+| 1–5 minutes | Selected-environment monitor created |
+| 2–10 minutes | Inventory `db_primary` host registered |
+| 2–20 minutes | Inventory `db_standby` host clones and joins |
 | 2–10 minutes | WAL SSH keys, users, archive configuration |
 | 2–10 minutes | PgBouncer, HAProxy, Keepalived, VIP, exporters |
 
@@ -353,27 +397,51 @@ ansible-playbook -i inventories/uat_hosts.ini site.yml --ask-vault-pass \
 ## 7. Step 3 — Deploy Production
 
 Production must use reviewed Production IPs, CIDRs, VIP, NTP sources, and Vault
-secrets. Re-run the disk and interface checks first.
+secrets. Confirm `keepalived_interface`, verify that every inventory name has an
+exact `host_ips` key, and re-run disk/interface checks first. When Production
+LVM, XFS, mounts, and `/etc/fstab` are already provisioned, keep
+`storage_lvm_enabled: false` and explicitly skip storage:
 
 ```bash
 ansible-playbook -i inventories/prod_hosts.ini site.yml \
   --syntax-check --ask-vault-pass
 
-ansible-playbook -i inventories/prod_hosts.ini site.yml --ask-vault-pass \
+ansible-playbook -i inventories/prod_hosts.ini site.yml \
+  --skip-tags storage -e storage_lvm_enabled=false --ask-vault-pass \
   | tee "prod-deployment-$(date +%F-%H%M).log"
 ```
 
 Do not use `--limit` for the first deployment. The monitor, primary, and standby
-plays depend on their declared sequence.
+plays depend on their declared sequence. The preflight must resolve the five
+Production hosts listed in Section 1 and must reject every remaining
+`CHANGE_ME` guard value.
 
 ## 8. Step 4 — Post-deployment verification
 
-The examples below use UAT. Replace the inventory filename for Production.
+Select the environment once before using the commands in this section:
+
+```bash
+# UAT
+export INVENTORY="$PWD/inventories/uat_hosts.ini"
+export DB_MONITOR=BHC-QMSSQLU07
+export ROUTER_PRIMARY=BHC-PGBSQLU03
+
+# Production (use these three lines instead for Production)
+export INVENTORY="$PWD/inventories/prod_hosts.ini"
+export DB_MONITOR=BHC-QMSSQLP03.bayshore.ca
+export ROUTER_PRIMARY=BHC-PGBSQLP01.bayshore.ca
+```
+
+Confirm the selected inventory before running a test:
+
+```bash
+ansible-inventory -i "$INVENTORY" --graph
+```
 
 ### 8.1 Check for failed services
 
 ```bash
-ansible all -i inventories/uat_hosts.ini -b -m command \
+ansible all -i "$INVENTORY" -b -m command \
   -a "systemctl --failed --no-pager"
 ```
 
@@ -381,17 +449,17 @@ No required service should appear in the failed state.
 
 ### 8.2 Check PostgreSQL HA state
 
-Query the monitor on U07:
+Query the selected environment's monitor:
 
 ```bash
-ansible db_monitor -i inventories/uat_hosts.ini \
+ansible db_monitor -i "$INVENTORY" \
   -b --become-user postgres -m command \
   -a "pg_autoctl show state --pgdata /pgdata/pgroot/data"
 ```
 
 Expected:
 
-- U05 and U06 are listed;
+- both selected-environment data nodes are listed;
 - one node has primary state;
 - the other has secondary state;
 - assigned and reported states settle to stable values.
@@ -399,14 +467,14 @@ Expected:
 Check the local systemd service on all database hosts:
 
 ```bash
-ansible db_cluster -i inventories/uat_hosts.ini -b -m command \
+ansible db_cluster -i "$INVENTORY" -b -m command \
   -a "systemctl status pg_autoctl --no-pager"
 ```
 
 Check synchronous replication from the current primary:
 
 ```bash
-ansible db_primary -i inventories/uat_hosts.ini \
+ansible db_primary -i "$INVENTORY" \
   -b --become-user postgres -m shell \
   -a "psql -d postgres -Atc 'SHOW synchronous_commit; SHOW synchronous_standby_names;'"
 ```
@@ -414,8 +482,8 @@ ansible db_primary -i inventories/uat_hosts.ini \
 ### 8.3 Check Chrony synchronization and drift
 
 ```bash
-ansible all -i inventories/uat_hosts.ini -m command -a "chronyc tracking"
-ansible all -i inventories/uat_hosts.ini -m command -a "chronyc sources"
+ansible all -i "$INVENTORY" -m command -a "chronyc tracking"
+ansible all -i "$INVENTORY" -m command -a "chronyc sources"
 ```
 
 Expected:
@@ -427,20 +495,20 @@ Expected:
 ### 8.4 Check LVM, XFS, mounts, and fstab
 
 ```bash
-ansible db_cluster -i inventories/uat_hosts.ini -b -m command -a "pvs"
-ansible db_cluster -i inventories/uat_hosts.ini -b -m command -a "vgs"
-ansible db_cluster -i inventories/uat_hosts.ini -b -m command -a "lvs"
+ansible db_cluster -i "$INVENTORY" -b -m command -a "pvs"
+ansible db_cluster -i "$INVENTORY" -b -m command -a "vgs"
+ansible db_cluster -i "$INVENTORY" -b -m command -a "lvs"
 
-ansible all -i inventories/uat_hosts.ini -b -m shell \
+ansible all -i "$INVENTORY" -b -m shell \
   -a "df -Th /pgdata /pgdata/* 2>/dev/null || true"
 
-ansible db_primary:db_standby -i inventories/uat_hosts.ini -b -m command \
+ansible db_primary:db_standby -i "$INVENTORY" -b -m command \
   -a "findmnt /pgdata/pgroot/data/pg_wal"
 
-ansible db_cluster -i inventories/uat_hosts.ini -b -m command \
+ansible db_cluster -i "$INVENTORY" -b -m command \
   -a "mountpoint /pgdata/pgroot/data"
 
-ansible db_cluster -i inventories/uat_hosts.ini -b -m shell \
+ansible db_cluster -i "$INVENTORY" -b -m shell \
   -a "stat -c '%d %n' /pgdata/pgroot/data /pgdata/pgroot/backup"
 ```
 
@@ -458,7 +526,7 @@ Expected:
 ### 8.5 Check UFW policy and role ports
 
 ```bash
-ansible all -i inventories/uat_hosts.ini -m command \
+ansible all -i "$INVENTORY" -m command \
   -a "sudo ufw status verbose"
 ```
 
@@ -476,8 +544,8 @@ Every host must show:
 ### 8.6 Check Keepalived VIP ownership
 
 ```bash
-ansible routing_nodes -i inventories/uat_hosts.ini -b -m command \
-  -a "ip -brief address show dev ens33"
+ansible routing_nodes -i "$INVENTORY" -b -m shell \
+  -a "ip -brief address show dev {{ keepalived_interface }}"
 ```
 
 Use the selected environment's `keepalived_interface`. The VIP should appear on
@@ -486,7 +554,7 @@ exactly one routing node.
 Check services:
 
 ```bash
-ansible routing_nodes -i inventories/uat_hosts.ini -b -m command \
+ansible routing_nodes -i "$INVENTORY" -b -m command \
   -a "systemctl status pgbouncer haproxy keepalived --no-pager"
 ```
 
@@ -495,7 +563,7 @@ ansible routing_nodes -i inventories/uat_hosts.ini -b -m command \
 Read the HAProxy runtime socket:
 
 ```bash
-ansible routing_nodes -i inventories/uat_hosts.ini -b -m shell \
+ansible routing_nodes -i "$INVENTORY" -b -m shell \
   -a 'echo "show stat" | socat stdio /run/haproxy/admin.sock'
 ```
 
@@ -505,7 +573,7 @@ standby should be marked down by the external primary check.
 Check the local statistics page:
 
 ```bash
-ansible routing_nodes -i inventories/uat_hosts.ini -m uri \
+ansible routing_nodes -i "$INVENTORY" -m uri \
   -a "url=http://127.0.0.1:8404/stats status_code=200"
 ```
 
@@ -516,7 +584,7 @@ Port 8404 is intentionally not opened by UFW for remote access.
 SSH to a routing node:
 
 ```bash
-ssh ansible@BHC-PGBSQLU03
+ssh "ansible@${ROUTER_PRIMARY}"
 ```
 
 Then run:
@@ -530,8 +598,8 @@ psql -h 127.0.0.1 -p 6432 -U pgbouncer_exporter pgbouncer \
 unset PGPASSWORD
 ```
 
-Repeat on U04. `SHOW POOLS` should return pool statistics without an
-authentication error.
+Repeat on the other routing host. `SHOW POOLS` should return pool statistics
+without an authentication error.
 
 ### 8.9 Test the complete VIP connection path
 
@@ -572,13 +640,34 @@ sudo -u postgres psql -d postgres -c \
   "SELECT archived_count, failed_count, last_archived_wal, last_failed_wal FROM pg_stat_archiver;"
 ```
 
-On U07:
+On the selected environment monitor:
 
 ```bash
 sudo -u postgres ls -lh /pgdata/WalArchive | tail
 ```
 
 `failed_count` should not increase and a new WAL segment should appear.
+
+### 8.12 Run the automated read-only health test
+
+The test wrappers default to UAT. Always set `INVENTORY` explicitly for
+Production and inspect the graph before execution:
+
+```bash
+ansible-inventory -i "$INVENTORY" --graph
+bash tests/run_health.sh --ask-vault-pass
+```
+
+For a one-command Production invocation:
+
+```bash
+INVENTORY="$PWD/inventories/prod_hosts.ini" \
+  bash tests/run_health.sh --ask-vault-pass
+```
+
+Do not run `run_routing_failover.sh`, `run_db_failover.sh`, or
+`RUN_DISRUPTIVE=true tests/run_all.sh` in Production without an approved
+maintenance window.
 
 ## 9. Optional controlled failover test
 
@@ -587,8 +676,8 @@ Perform this only in an approved maintenance window.
 1. Record the current primary:
 
    ```bash
-   ssh ansible@BHC-QMSSQLU07
-   sudo -u postgres pg_autoctl show state --pgdata /pgdata/pgroot/data
+   ansible "$DB_MONITOR" -i "$INVENTORY" -b --become-user postgres \
+     -m command -a "pg_autoctl show state --pgdata /pgdata/pgroot/data"
    ```
 
 2. On the current primary, stop pg_autoctl:
@@ -597,10 +686,12 @@ Perform this only in an approved maintenance window.
    sudo systemctl stop pg_autoctl
    ```
 
-3. Watch state on U07:
+3. Watch state on the selected environment monitor:
 
    ```bash
-   watch -n 2 "sudo -u postgres pg_autoctl show state --pgdata /pgdata/pgroot/data"
+   watch -n 2 \
+     "ansible '$DB_MONITOR' -i '$INVENTORY' -b --become-user postgres \
+     -m command -a 'pg_autoctl show state --pgdata /pgdata/pgroot/data'"
    ```
 
 4. Repeat the VIP SQL test. It must reach the promoted node and return
@@ -629,7 +720,7 @@ server-build record, then accept it.
 If a VM was rebuilt and the old key is cached:
 
 ```bash
-ssh-keygen -R BHC-QMSSQLU05
+ssh-keygen -R <ENVIRONMENT_HOSTNAME>
 ssh-keygen -R <HOST_IP>
 ssh-keyscan -H <HOST_IP> >> ~/.ssh/known_hosts
 ```
@@ -668,12 +759,13 @@ Confirm DNS and outbound UDP 123. If public pools are blocked, replace
 Do not delete PGDATA immediately. Check the authoritative monitor state:
 
 ```bash
-ssh ansible@BHC-QMSSQLU07
-sudo -u postgres pg_autoctl show state --pgdata /pgdata/pgroot/data
-sudo journalctl -u pg_autoctl -n 200 --no-pager
+ansible "$DB_MONITOR" -i "$INVENTORY" -b --become-user postgres \
+  -m command -a "pg_autoctl show state --pgdata /pgdata/pgroot/data"
+ansible "$DB_MONITOR" -i "$INVENTORY" -b -m command \
+  -a "journalctl -u pg_autoctl -n 200 --no-pager"
 ```
 
-On U05:
+On the inventory `db_primary` host:
 
 ```bash
 sudo systemctl status pg_autoctl --no-pager
@@ -683,8 +775,8 @@ sudo -u postgres pg_isready -h 127.0.0.1 -p 5432
 
 Verify:
 
-- U05 is registered on the monitor;
-- U05/U06 can reach U07 TCP 5432;
+- the inventory `db_primary` host is registered on the monitor;
+- both data nodes can reach the selected monitor on TCP 5432;
 - monitor password and URI values match;
 - clocks are synchronized;
 - UFW permits `cluster_cidr`;
@@ -693,7 +785,7 @@ Verify:
 After fixing the cause, rerun the complete play:
 
 ```bash
-ansible-playbook -i inventories/uat_hosts.ini site.yml --ask-vault-pass
+ansible-playbook -i "$INVENTORY" site.yml --ask-vault-pass
 ```
 
 ### Both HAProxy backends are down
@@ -727,15 +819,15 @@ sudo -u postgres ssh \
 sudo -u postgres psql -d postgres -c "SELECT * FROM pg_stat_archiver;"
 ```
 
-Check SSH host keys, key authorization, U07 archive ownership, disk space, and
-network access.
+Check SSH host keys, key authorization, selected-monitor archive ownership,
+disk space, and network access.
 
 ## 11. Safe re-runs
 
 The playbook is designed to be re-run after correcting a failure:
 
 ```bash
-ansible-playbook -i inventories/uat_hosts.ini site.yml --ask-vault-pass
+ansible-playbook -i "$INVENTORY" site.yml --ask-vault-pass
 ```
 
 Important behavior:
