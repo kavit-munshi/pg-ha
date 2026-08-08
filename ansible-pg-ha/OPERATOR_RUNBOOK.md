@@ -4,13 +4,27 @@
 
 The playbooks provision the following hardened Ubuntu 24.04 hosts:
 
-| Host | Function | Database/routing behavior |
-|---|---|---|
-| `BHC-QMSSQLU05` | Initial PostgreSQL primary | pg_auto_failover data node; PgBouncer U03 is paired to it |
-| `BHC-QMSSQLU06` | Synchronous standby | pg_auto_failover data node; PgBouncer U04 is paired to it |
-| `BHC-QMSSQLU07` | pg_auto_failover monitor and WAL archive | Monitor database plus `/pgdata/WalArchive` |
-| `BHC-PGBSQLU03` | Routing node 1 | Keepalived MASTER priority 101, HAProxy, PgBouncer |
-| `BHC-PGBSQLU04` | Routing node 2 | Keepalived BACKUP priority 100, HAProxy, PgBouncer |
+| Environment | Host | IP | Function |
+|---|---|---|---|
+| UAT | `BHC-QMSSQLU05` | `192.168.129.105` | Initial PostgreSQL primary |
+| UAT | `BHC-QMSSQLU06` | `192.168.129.106` | Synchronous standby |
+| UAT | `BHC-QMSSQLU07` | `192.168.129.107` | pg_auto_failover monitor and WAL archive |
+| UAT | `BHC-PGBSQLU03` | `192.168.129.108` | Initial VIP MASTER, HAProxy, PgBouncer |
+| UAT | `BHC-PGBSQLU04` | `192.168.129.109` | Initial VIP BACKUP, HAProxy, PgBouncer |
+| Production | `BHC-QMSSQLP01.bayshore.ca` | `192.168.128.134` | Initial PostgreSQL primary |
+| Production | `BHC-QMSSQLP02.bayshore.ca` | `192.168.128.135` | Synchronous standby |
+| Production | `BHC-QMSSQLP03.bayshore.ca` | `192.168.128.136` | pg_auto_failover monitor and WAL archive |
+| Production | `BHC-PGBSQLP01.bayshore.ca` | `192.168.128.137` | Initial VIP MASTER, HAProxy, PgBouncer |
+| Production | `BHC-PGBSQLP02.bayshore.ca` | `192.168.128.138` | Initial VIP BACKUP, HAProxy, PgBouncer |
+
+UAT uses VIP `192.168.129.110/24`; Production uses VIP/DNS `PGBQMSLSP01`
+(`192.168.128.139/24`). Production application clients originate from
+`192.168.4.0/24`, and external Prometheus `BHC-PGMSQLP01`
+(`192.168.128.140`) scrapes the exporter endpoints.
+
+The checked-in Production inventory may use short routing aliases while DNS
+reports the FQDNs shown above. Whichever form is used for `inventory_hostname`
+must have an exact matching key in `group_vars/prod.yml` under `host_ips`.
 
 Client writes enter the Keepalived VIP on TCP 5432. HAProxy's external health
 check maps each PgBouncer backend to its paired PostgreSQL node and accepts the
@@ -20,7 +34,8 @@ the new primary.
 
 WAL is archived from both database candidates with `archive_command` and a
 dedicated Ed25519 key. The archive script sends each completed segment to
-`BHC-QMSSQLU07:/pgdata/WalArchive` using an atomic `.partial` rename.
+the selected environment's monitor under `/pgdata/WalArchive` using an atomic
+`.partial` rename.
 
 ## 2. Safety and prerequisites
 
@@ -28,9 +43,11 @@ The storage role partitions and formats the named data disks. Before running it,
 confirm VMware presents exactly these devices and that they contain no data to
 retain:
 
-- U05/U06: `/dev/sdb`, at least 660 GiB usable
-- U07: `/dev/sdb`, at least 400 GiB; `/dev/sdc`, at least 660 GiB usable
-- U03/U04: `/dev/sdb`, at least 120 GiB
+- UAT U05/U06 or Production database P01/P02: database LVM disk, at least
+  660 GiB usable
+- UAT U07 or Production database P03: archive disk plus database LVM disk;
+  deployed Production archive is the 405 GB `/dev/sdc1`
+- UAT U03/U04 or Production routing P01/P02: `/dev/sdb`, at least 120 GiB
 
 On database hosts, `lv_data` is mounted at `/pgdata/pgroot`. PGDATA is the
 ordinary directory `/pgdata/pgroot/data`, and pg_autoctl stages backups at
@@ -48,6 +65,11 @@ sudo lvs
 ip -br link
 ```
 
+Production storage is pre-provisioned and uses `storage_lvm_enabled: false`.
+Do not format its disks. Confirm P03 has `/dev/sdc1` mounted as XFS at
+`/pgdata/WalArchive`, and confirm each routing node has `/dev/sdb1` mounted at
+`/pgdata` (not `/pgdata/pgroot`).
+
 Confirm the routing VIP-facing NIC name. UAT currently uses `ens33`; configure
 `keepalived_interface` independently in `group_vars/uat.yml` and
 `group_vars/prod.yml`.
@@ -56,7 +78,7 @@ Network prerequisites:
 
 - Control server to all nodes: TCP 22
 - All five nodes inside `cluster_cidr`: PostgreSQL 5432 and PgBouncer 6432
-- VRRP unicast between U03 and U04
+- VRRP unicast between the selected environment's two routing nodes
 - Application CIDR to routing nodes/VIP: TCP 5432
 - Prometheus CIDR to all nodes: 9100; DB nodes: 9187; routers: 9127 and 8404
 - DB candidates to monitor/archive node: TCP 22 and 5432
@@ -141,6 +163,9 @@ Validate inventory resolution before touching hosts:
 ```bash
 ansible-inventory -i inventories/uat_hosts.ini --graph
 ansible-inventory -i inventories/uat_hosts.ini --host BHC-QMSSQLU05
+ansible-inventory -i inventories/prod_hosts.ini --graph
+ansible-inventory -i inventories/prod_hosts.ini \
+  --host BHC-QMSSQLP01.bayshore.ca
 ```
 
 ## 5. Bootstrap SSH keys with password authentication
@@ -148,13 +173,15 @@ ansible-inventory -i inventories/uat_hosts.ini --host BHC-QMSSQLU05
 The first connection uses the existing `ansible` account and its password:
 
 ```bash
-ansible-playbook -i inventories/uat_hosts.ini bootstrap.yml --ask-pass
+ansible-playbook -i inventories/uat_hosts.ini bootstrap.yml \
+  --ask-pass --ask-vault-pass
 ```
 
 For Production:
 
 ```bash
-ansible-playbook -i inventories/prod_hosts.ini bootstrap.yml --ask-pass
+ansible-playbook -i inventories/prod_hosts.ini bootstrap.yml \
+  --ask-pass --ask-vault-pass
 ```
 
 The role installs the control operator's `~/.ssh/id_rsa.pub`, enforces
@@ -163,7 +190,13 @@ The role installs the control operator's `~/.ssh/id_rsa.pub`, enforces
 Test key authentication:
 
 ```bash
-ansible -i inventories/uat_hosts.ini all_nodes -m ping
+ansible -i inventories/uat_hosts.ini all_nodes -m ping --ask-vault-pass
+```
+
+Production:
+
+```bash
+ansible -i inventories/prod_hosts.ini all_nodes -m ping --ask-vault-pass
 ```
 
 ## 6. Preflight and deploy UAT
@@ -171,7 +204,8 @@ ansible -i inventories/uat_hosts.ini all_nodes -m ping
 Syntax and reachability checks:
 
 ```bash
-ansible-playbook -i inventories/uat_hosts.ini site.yml --syntax-check
+ansible-playbook -i inventories/uat_hosts.ini site.yml \
+  --syntax-check --ask-vault-pass
 ansible -i inventories/uat_hosts.ini all_nodes -b -m command -a \
   "lsblk -e7 -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINTS"
 ansible -i inventories/uat_hosts.ini all_nodes -b -m command -a \
@@ -196,17 +230,39 @@ force a retry.
 ## 7. Deploy Production
 
 Repeat all disk, interface, IP, and firewall checks against the Production
-inventory. Then run:
+inventory. Confirm the five Production host/IP mappings in Section 1,
+`PGBQMSLSP01`, `192.168.4.0/24`, the Prometheus source, and the routing NIC.
+When storage is pre-provisioned, keep `storage_lvm_enabled: false`. Then run:
 
 ```bash
-ansible-playbook -i inventories/prod_hosts.ini site.yml --syntax-check
-ansible-playbook -i inventories/prod_hosts.ini site.yml --ask-vault-pass
+ansible-playbook -i inventories/prod_hosts.ini site.yml \
+  --syntax-check --ask-vault-pass
+ansible-playbook -i inventories/prod_hosts.ini site.yml \
+  --skip-tags storage -e storage_lvm_enabled=false --ask-vault-pass
 ```
 
 Use `--limit` only for non-sequencing maintenance after the initial build. The
 first deployment must use the full `site.yml` ordering.
 
 ## 8. Verify storage and services
+
+Select one environment for all commands below:
+
+```bash
+# UAT
+export INVENTORY="$PWD/inventories/uat_hosts.ini"
+export DB_MONITOR=BHC-QMSSQLU07
+
+# Production (use these instead for Production)
+export INVENTORY="$PWD/inventories/prod_hosts.ini"
+export DB_MONITOR=BHC-QMSSQLP03.bayshore.ca
+```
+
+Always confirm the target before continuing:
+
+```bash
+ansible-inventory -i "$INVENTORY" --graph
+```
 
 On all nodes:
 
@@ -220,8 +276,8 @@ curl -fsS http://127.0.0.1:9100/metrics >/dev/null
 Check NTP synchronization status across all cluster nodes:
 
 ```bash
-ansible all -i inventories/uat_hosts.ini -m command -a "chronyc tracking"
-ansible all -i inventories/uat_hosts.ini -m command -a "chronyc sources"
+ansible all -i "$INVENTORY" -m command -a "chronyc tracking"
+ansible all -i "$INVENTORY" -m command -a "chronyc sources"
 ```
 
 Every host should report `Leap status: Normal`. In `chronyc sources`, the
@@ -231,7 +287,7 @@ before proceeding with database failover testing.
 Check the enforced UFW policy and role-specific rules across all nodes:
 
 ```bash
-ansible all -i inventories/uat_hosts.ini -m command \
+ansible all -i "$INVENTORY" -m command \
   -a "sudo ufw status verbose"
 ```
 
@@ -241,7 +297,8 @@ node exporter 9100. Database nodes additionally expose 5432 and 9187. Routing
 nodes additionally expose 5432, 6432, 9127, plus a VRRP rule restricted to the
 other routing node.
 
-On U05/U06, verify the WAL bind mount and pg_autoctl:
+On both data nodes in the selected environment, verify the WAL bind mount and
+pg_autoctl:
 
 ```bash
 findmnt /pgdata/pgroot
@@ -256,16 +313,16 @@ sudo -u postgres pg_autoctl show state --pgdata /pgdata/pgroot/data
 must match so pg_autoctl can atomically rename a completed base backup to
 PGDATA.
 
-The authoritative cluster view is on U07:
+The authoritative cluster view is on the selected `db_monitor` host:
 
 ```bash
 sudo -u postgres pg_autoctl show state --pgdata /pgdata/pgroot/data
 sudo -u postgres pg_autoctl show uri --pgdata /pgdata/pgroot/data
 ```
 
-Expected result: U05 and U06 are both present; one is primary and the other is
-secondary. Wait until both report stable assigned and reported states before
-testing failover.
+Expected result: both environment data nodes are present; one is primary and
+the other is secondary. Wait until both report stable assigned and reported
+states before testing failover.
 
 Verify synchronous commit while the standby is healthy:
 
@@ -320,7 +377,7 @@ curl -fsS http://<db-node-ip>:9187/metrics | head
 curl -fsS http://<routing-node-ip>:9127/metrics | head
 ```
 
-Force a WAL switch on the primary and verify arrival on U07:
+Force a WAL switch on the primary and verify arrival on the selected monitor:
 
 ```bash
 sudo -u postgres psql -d postgres -c "SELECT pg_switch_wal();"
@@ -328,7 +385,7 @@ sudo -u postgres psql -d postgres -c \
   "SELECT archived_count, failed_count, last_archived_wal, last_failed_wal FROM pg_stat_archiver;"
 ```
 
-On U07:
+On the selected environment monitor:
 
 ```bash
 sudo -u postgres ls -lh /pgdata/WalArchive | tail
@@ -337,6 +394,22 @@ sudo -u postgres ls -lh /pgdata/WalArchive | tail
 The included Rubrik hook is inert by default. After installing and validating
 the RBS agent, set `rubrik_rbs_enabled: true`, set
 `rubrik_rbs_hook_command`, and re-run `site.yml`.
+
+Run the automated read-only health test with the selected inventory. Test
+wrappers default to UAT when `INVENTORY` is absent, so Production operators
+must set it explicitly:
+
+```bash
+ansible-inventory -i "$INVENTORY" --graph
+bash tests/run_health.sh --ask-vault-pass
+```
+
+Equivalent one-command Production invocation:
+
+```bash
+INVENTORY="$PWD/inventories/prod_hosts.ini" \
+  bash tests/run_health.sh --ask-vault-pass
+```
 
 ## 11. Controlled failover test
 

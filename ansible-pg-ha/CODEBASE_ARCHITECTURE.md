@@ -14,13 +14,18 @@ For operator commands, use `DEPLOYMENT_HOWTO.md`.
 The targets are VMware virtual machines running Ubuntu 24.04 LTS. Database
 nodes use PostgreSQL 18 from the official PGDG repository.
 
-| Inventory group | Host | Sizing | Function |
-|---|---|---:|---|
-| `db_primary` | `BHC-QMSSQLU05` | 16 vCPU, 32 GB, ~700 GB | Initial PostgreSQL primary |
-| `db_standby` | `BHC-QMSSQLU06` | 16 vCPU, 32 GB, ~700 GB | Initial synchronous standby |
-| `db_monitor` | `BHC-QMSSQLU07` | 8 vCPU, 16 GB, ~1.1 TB | pg_auto_failover monitor and WAL archive |
-| `routing_nodes` | `BHC-PGBSQLU03` | 8 vCPU, 16 GB, ~160 GB | PgBouncer/HAProxy and initial VIP MASTER |
-| `routing_nodes` | `BHC-PGBSQLU04` | 8 vCPU, 16 GB, ~160 GB | PgBouncer/HAProxy and initial VIP BACKUP |
+| Environment | Inventory group | Host | IP | Function |
+|---|---|---|---|---|
+| UAT | `db_primary` | `BHC-QMSSQLU05` | `192.168.129.105` | Initial PostgreSQL primary |
+| UAT | `db_standby` | `BHC-QMSSQLU06` | `192.168.129.106` | Initial synchronous standby |
+| UAT | `db_monitor` | `BHC-QMSSQLU07` | `192.168.129.107` | pg_auto_failover monitor and WAL archive |
+| UAT | `routing_nodes` | `BHC-PGBSQLU03` | `192.168.129.108` | PgBouncer/HAProxy and initial VIP MASTER |
+| UAT | `routing_nodes` | `BHC-PGBSQLU04` | `192.168.129.109` | PgBouncer/HAProxy and initial VIP BACKUP |
+| Production | `db_primary` | `BHC-QMSSQLP01.bayshore.ca` | `192.168.128.134` | Initial PostgreSQL primary |
+| Production | `db_standby` | `BHC-QMSSQLP02.bayshore.ca` | `192.168.128.135` | Initial synchronous standby |
+| Production | `db_monitor` | `BHC-QMSSQLP03.bayshore.ca` | `192.168.128.136` | pg_auto_failover monitor and WAL archive |
+| Production | `routing_nodes` | `BHC-PGBSQLP01` (`BHC-PGBSQLP01.bayshore.ca`) | `192.168.128.137` | PgBouncer/HAProxy and initial VIP MASTER |
+| Production | `routing_nodes` | `BHC-PGBSQLP02` (`BHC-PGBSQLP02.bayshore.ca`) | `192.168.128.138` | PgBouncer/HAProxy and initial VIP BACKUP |
 
 `db_cluster` contains all three database-side hosts. `all_nodes` contains
 `db_cluster` and `routing_nodes`.
@@ -50,10 +55,12 @@ Current PostgreSQL primary:5432
 
 Each PgBouncer has a fixed database candidate:
 
-| Routing host | `routing_slot` | PgBouncer database target |
-|---|---|---|
-| U03 | `primary` | U05 |
-| U04 | `standby` | U06 |
+| Environment | Routing host | `routing_slot` | PgBouncer database target |
+|---|---|---|---|
+| UAT | `BHC-PGBSQLU03` | `primary` | `BHC-QMSSQLU05` |
+| UAT | `BHC-PGBSQLU04` | `standby` | `BHC-QMSSQLU06` |
+| Production | `BHC-PGBSQLP01` | `primary` | `BHC-QMSSQLP01.bayshore.ca` |
+| Production | `BHC-PGBSQLP02` | `standby` | `BHC-QMSSQLP02.bayshore.ca` |
 
 HAProxy on both routing hosts lists both PgBouncer instances as backends.
 Before enabling a backend, `/usr/local/sbin/check-pg-primary` maps the backend
@@ -63,9 +70,10 @@ routing IP to its paired PostgreSQL IP and executes:
 SELECT pg_is_in_recovery();
 ```
 
-Only `false` is accepted. After pg_auto_failover promotes U06, HAProxy disables
-the U03/U05 path and enables the U04/U06 path. The fixed pairing therefore
-follows promotions without rewriting PgBouncer configuration.
+Only `false` is accepted. After pg_auto_failover promotes the configured
+standby, HAProxy disables the initial-primary routing path and enables the
+standby routing path. The fixed pairing therefore follows promotions without
+rewriting PgBouncer configuration in either environment.
 
 ## 3. Repository layout (complete)
 
@@ -162,6 +170,7 @@ ansible-pg-ha/
         │   └── main.yml
         └── templates/
             ├── archive-wal.sh.j2
+            ├── postgresql-archive.conf.j2
             └── rubrik-rbs-hook.sh.j2
 ```
 
@@ -208,22 +217,15 @@ entries are established.
 
 ## 5. Inventory design
 
-Both INI inventories expose the same logical topology:
+Both INI inventories expose the same logical topology with different hosts:
 
-```ini
-[db_primary]
-BHC-QMSSQLU05
-
-[db_standby]
-BHC-QMSSQLU06
-
-[db_monitor]
-BHC-QMSSQLU07
-
-[routing_nodes]
-BHC-PGBSQLU03 routing_slot=primary
-BHC-PGBSQLU04 routing_slot=standby
-```
+| Group | UAT inventory host | Production inventory host |
+|---|---|---|
+| `db_primary` | `BHC-QMSSQLU05` | `BHC-QMSSQLP01.bayshore.ca` |
+| `db_standby` | `BHC-QMSSQLU06` | `BHC-QMSSQLP02.bayshore.ca` |
+| `db_monitor` | `BHC-QMSSQLU07` | `BHC-QMSSQLP03.bayshore.ca` |
+| `routing_nodes`, `routing_slot=primary` | `BHC-PGBSQLU03` | `BHC-PGBSQLP01` |
+| `routing_nodes`, `routing_slot=standby` | `BHC-PGBSQLU04` | `BHC-PGBSQLP02` |
 
 Child groups compose the topology:
 
@@ -238,13 +240,16 @@ all_nodes
 
 The UAT inventory adds all nodes to group `uat`; the Production inventory adds
 them to group `prod`. Those environment groups trigger the corresponding
-variable file.
+variable file. The deployed Production routing hosts may resolve with the
+`.bayshore.ca` DNS suffix; if FQDNs are used as inventory names, the keys in
+`host_ips` must use those exact same strings.
 
 ### 5.1 Why `routing_slot` exists
 
 `routing_slot` is a host variable used by two roles:
 
-- `pgbouncer` chooses U05 for `primary` and U06 for `standby`;
+- `pgbouncer` chooses the member of `db_primary` for `primary` and the member
+  of `db_standby` for `standby`;
 - `keepalived_haproxy` chooses MASTER/priority 101 for `primary` and
   BACKUP/priority 100 for `standby`.
 
@@ -288,6 +293,11 @@ then maintains the complete mapping between marked lines in `/etc/hosts`.
 `blockinfile` makes the operation idempotent and preserves unrelated local
 entries.
 
+The test wrapper scripts use `inventories/uat_hosts.ini` when the `INVENTORY`
+environment variable is absent. Production execution must therefore export
+`INVENTORY=$PWD/inventories/prod_hosts.ini` before invoking a wrapper. The test
+playbooks select `uat.yml` or `prod.yml` from the corresponding inventory group.
+
 ### 6.2 Environment variables
 
 `uat.yml` and `prod.yml` own:
@@ -301,6 +311,16 @@ entries.
 - Logstash address;
 - environment NTP sources;
 - placeholder secret overrides.
+
+Current environment network values are:
+
+| Setting | UAT | Production |
+|---|---|---|
+| Cluster CIDR | `192.168.129.0/24` | `192.168.128.0/24` |
+| Application CIDR | `192.168.24.0/24` | `192.168.4.0/24` |
+| PostgreSQL VIP | `192.168.129.110/24` | `192.168.128.139/24` |
+| VIP DNS | Not defined | `PGBQMSLSP01` |
+| Prometheus source | `192.168.129.0/24` | `BHC-PGMSQLP01` / `192.168.128.140/32` |
 
 ### 6.3 Secret guard
 
@@ -359,7 +379,8 @@ Important ordering properties:
 - SSH is permitted before UFW is enabled.
 - Chrony must report `Leap status: Normal` before cluster initialization.
 - The monitor exists before any data node registers.
-- U05 registers before U06 attempts to join.
+- the selected environment's `db_primary` host registers before its
+  `db_standby` host attempts to join.
 - WAL/archive changes are serialized across database hosts.
 - HAProxy starts before Keepalived advertises the VIP.
 - exporters are installed after their database/pooler users exist.
@@ -474,7 +495,7 @@ Target: all nodes, with tasks selected by inventory membership.
 Installs `lvm2` and `xfsprogs`. Device assertions intentionally restrict the
 implemented layouts to `/dev/sdb` and `/dev/sdc`.
 
-### Database nodes U05/U06
+### Database data nodes
 
 1. Creates GPT `/dev/sdb1` with the LVM flag.
 2. Uses the partition as a PV through `community.general.lvg`.
@@ -490,15 +511,23 @@ implemented layouts to `/dev/sdb` and `/dev/sdc`.
 | `lv_binaries` | 100 GiB | `/pgdata/binaries` |
 | `lv_dbinst` | 100 GiB | `/pgdata/dbinst` |
 
-### Monitor/archive U07
+This applies to UAT U05/U06 and Production P01/P02.
 
-- `/dev/sdc1` supplies `vg_pgdata` and the same LV set.
-- `/dev/sdb1` is a separate 400 GiB XFS filesystem mounted at
-  `/pgdata/WalArchive`.
+### Monitor/archive node
 
-### Routing nodes U03/U04
+The automated reference layout uses `/dev/sdc1` for `vg_pgdata` and
+`/dev/sdb1` as a separate 400 GiB XFS filesystem mounted at
+`/pgdata/WalArchive`. Production storage is pre-provisioned with
+`storage_lvm_enabled: false`; the deployed P03 archive filesystem is the
+405 GB `/dev/sdc1`, so the automation must not repartition it. UAT uses U07 and
+Production uses P03 for this logical role regardless of their physical device
+ordering.
+
+### Routing nodes
 
 - `/dev/sdb1` is a 120 GiB XFS filesystem mounted at `/pgdata`.
+
+This applies to UAT U03/U04 and Production P01/P02 routing hosts.
 
 All mounts use `defaults,noatime` and `ansible.posix.mount state=mounted`,
 which both mounts immediately and creates persistent `/etc/fstab` entries.
@@ -538,7 +567,8 @@ sets `LimitNOFILE=65536`.
 
 ### Monitor initialization
 
-On U07, `monitor.yml` executes `pg_autoctl create monitor` with:
+On the environment's `db_monitor` host, `monitor.yml` executes
+`pg_autoctl create monitor` with:
 
 - PGDATA `/pgdata/pgroot/data`;
 - port 5432;
@@ -552,14 +582,14 @@ It then:
 - enables `pg_autoctl.service`;
 - waits with `pg_isready`;
 - assigns the monitor registration-user password;
-- adds HBA entries for U05/U06 and the exporter;
+- adds HBA entries for both environment data nodes and the exporter;
 - reloads PostgreSQL;
 - verifies `pg_autoctl show state`.
 
 ### Data-node initialization
 
-For the standby only, the role first delegates `pg_autoctl show state` to U07
-and waits until U05 appears.
+For the standby only, the role first delegates `pg_autoctl show state` to the
+environment monitor and waits until the inventory `db_primary` host appears.
 
 Both data nodes build a password-bearing monitor URI as a no-log fact and run
 `pg_autoctl create postgres` with SCRAM and required SSL when their pg_autoctl
@@ -737,16 +767,16 @@ Physical replication carries primary-side roles/database to the standby.
 
 ### WAL transport
 
-On U05/U06:
+On both data nodes in the selected environment:
 
 1. creates `/var/lib/postgresql/.ssh`;
 2. generates a dedicated Ed25519 archive key;
-3. creates the dedicated `postgres-wal-ssh` authorization group on U07;
-4. adds U07's `postgres` account to that group and permits the group through
+3. creates the dedicated `postgres-wal-ssh` authorization group on the monitor;
+4. adds the monitor's `postgres` account to that group and permits the group through
    the hardened SSH `AllowGroups` policy;
-5. delegates each public key to U07, restricted to its originating SQL-node IP;
+5. delegates each public key to the monitor, restricted to its originating SQL-node IP;
 6. verifies both key presence and noninteractive archive-directory access;
-7. scans and pins U07's SSH host key;
+7. scans and pins the monitor's SSH host key;
 8. installs `/usr/local/sbin/archive-wal`.
 
 The archive script:
@@ -756,8 +786,10 @@ The archive script:
 - atomically renames the remote file;
 - optionally invokes the Rubrik hook.
 
-The role appends a marked Ansible-managed block to `postgresql.conf`, after
-pg_auto_failover's includes, containing:
+The role deploys `postgresql-archive.conf` and ensures the durable
+`postgresql-ha.conf` includes it. This avoids writing archive settings into
+`postgresql.conf`, which pg_autoctl may regenerate during state transitions.
+The archive file contains:
 
 ```text
 wal_level = replica
@@ -766,7 +798,8 @@ archive_command = '/usr/local/sbin/archive-wal "%p" "%f"'
 archive_timeout = '300s'
 ```
 
-U07 owns `/pgdata/WalArchive` as `postgres:postgres`, mode `0750`.
+The selected environment's monitor owns `/pgdata/WalArchive` as
+`postgres:postgres`, mode `0750`.
 
 ### Rubrik
 
@@ -818,8 +851,8 @@ the single owner of inbound rules.
 | `/etc/sysctl.conf` managed keys | `os_tuning` |
 | `/etc/security/limits.conf` managed blocks | `os_tuning` |
 | `/etc/systemd/system/pg_autoctl.service` | `pg_auto_failover` |
-| `/pgdata/pgroot/data/postgresql-ha.conf` | `pg_auto_failover` |
-| `/pgdata/pgroot/data/postgresql.conf` WAL archive block | `backup_wal` |
+| `/pgdata/pgroot/data/postgresql-ha.conf` | `pg_auto_failover`; archive include also enforced by `backup_wal` |
+| `/pgdata/pgroot/data/postgresql-archive.conf` | `backup_wal` |
 | `/usr/local/sbin/archive-wal` | `backup_wal` |
 | `/usr/local/sbin/rubrik-rbs-wal-hook` | `backup_wal` |
 | `/etc/pgbouncer/pgbouncer.ini` | `pgbouncer` |
@@ -910,8 +943,9 @@ Boundaries requiring operational treatment:
 - `sslmode=require` encrypts but does not verify an enterprise CA identity;
 - PgBouncer userlist currently contains protected plaintext passwords;
 - `host_key_checking=False` weakens Ansible SSH identity validation;
-- WAL archive authorization gives U05/U06 source-restricted, key-only SSH
-  access as `postgres` on U07 through the dedicated `postgres-wal-ssh` group;
+- WAL archive authorization gives both environment data nodes
+  source-restricted, key-only SSH access as `postgres` on their monitor through
+  the dedicated `postgres-wal-ssh` group;
 - Keepalived PASS is limited by VRRP to eight characters;
 - UFW SSH defaults to `any` until operators restrict it;
 - secret safety depends on actual Vault use and repository hygiene.
