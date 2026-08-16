@@ -17,6 +17,15 @@ Documentation:
   for repository structure, roles, variables, and execution logic
 - [OPERATOR_RUNBOOK.md](OPERATOR_RUNBOOK.md) — original concise operator
   runbook
+- [SYSTEM_ARCHITECTURE_AND_RECOVERY.md](SYSTEM_ARCHITECTURE_AND_RECOVERY.md) —
+  authoritative end-to-end architecture, failure behavior, and node recovery
+  procedures
+- [DB_BACKUP_AND_RECOVERY_RUNBOOK.md](DB_BACKUP_AND_RECOVERY_RUNBOOK.md) —
+  detailed WAL/base-backup process, data-node recovery, monitor recovery,
+  VM restore, PITR, and total database-tier recovery
+- [CLIENT_DR_FAILOVER_TEST_RUNBOOK.md](CLIENT_DR_FAILOVER_TEST_RUNBOOK.md) —
+  client-observed automated and manual WAL, routing, database failover,
+  restoration, evidence, and isolated-restore test procedures
 - [UAT_ENVIRONMENT_HANDOVER.md](UAT_ENVIRONMENT_HANDOVER.md) — complete client
   handover covering the deployed platform, access, operations, controls,
   acceptance evidence, responsibilities, and open items

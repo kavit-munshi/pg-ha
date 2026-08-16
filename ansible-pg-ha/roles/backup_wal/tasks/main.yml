@@ -314,6 +314,96 @@
     mode: "0750"
   when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
 
+- name: Install hourly WAL switch helper
+  ansible.builtin.template:
+    src: force-wal-archive.sh.j2
+    dest: /usr/local/sbin/force-wal-archive
+    owner: root
+    group: postgres
+    mode: "0750"
+  when:
+    - inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+    - backup_wal_force_switch_enabled | bool
+
+- name: Install hourly WAL archive service
+  ansible.builtin.template:
+    src: postgresql-wal-archive-hourly.service.j2
+    dest: /etc/systemd/system/postgresql-wal-archive-hourly.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart hourly WAL archive timer
+  when:
+    - inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+    - backup_wal_force_switch_enabled | bool
+
+- name: Install hourly WAL archive timer
+  ansible.builtin.template:
+    src: postgresql-wal-archive-hourly.timer.j2
+    dest: /etc/systemd/system/postgresql-wal-archive-hourly.timer
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart hourly WAL archive timer
+  when:
+    - inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+    - backup_wal_force_switch_enabled | bool
+
+- name: Enable hourly WAL archive timer
+  ansible.builtin.systemd:
+    name: postgresql-wal-archive-hourly.timer
+    enabled: true
+    state: started
+    daemon_reload: true
+  when:
+    - inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+    - backup_wal_force_switch_enabled | bool
+
+- name: Verify hourly WAL archive timer
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - is-active
+      - postgresql-wal-archive-hourly.timer
+  register: backup_wal_hourly_timer_active
+  changed_when: false
+  failed_when: backup_wal_hourly_timer_active.stdout | trim != 'active'
+  when:
+    - inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+    - backup_wal_force_switch_enabled | bool
+
+- name: Inspect hourly WAL archive timer before disabling
+  ansible.builtin.stat:
+    path: /etc/systemd/system/postgresql-wal-archive-hourly.timer
+  register: backup_wal_hourly_timer_unit
+  when:
+    - inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+    - not (backup_wal_force_switch_enabled | bool)
+
+- name: Disable hourly WAL archive timer
+  ansible.builtin.systemd:
+    name: postgresql-wal-archive-hourly.timer
+    enabled: false
+    state: stopped
+    daemon_reload: true
+  when:
+    - inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+    - not (backup_wal_force_switch_enabled | bool)
+    - backup_wal_hourly_timer_unit.stat.exists
+
+- name: Remove disabled hourly WAL archive integration
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /usr/local/sbin/force-wal-archive
+    - /etc/systemd/system/postgresql-wal-archive-hourly.service
+    - /etc/systemd/system/postgresql-wal-archive-hourly.timer
+  notify: Reload systemd for WAL archive units
+  when:
+    - inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+    - not (backup_wal_force_switch_enabled | bool)
+
 - name: Include durable WAL archive configuration
   ansible.builtin.lineinfile:
     path: "{{ pgdata_path }}/postgresql-ha.conf"

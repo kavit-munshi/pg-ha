@@ -21,6 +21,12 @@ pginstance_path: /pgdata/dbinst
 pg_autoctl_config_path: "/var/lib/postgresql/.config/pg_autoctl{{ pgdata_path }}/pg_autoctl.cfg"
 wal_archive_path: /pgdata/WalArchive
 wal_archive_ssh_group: postgres-wal-ssh
+# Completed WAL segments are still shipped immediately by archive_command.
+# This interval forces the active primary to close a partially filled segment
+# at least once per hour so low-volume databases meet the archive schedule.
+backup_wal_force_switch_enabled: true
+backup_wal_force_switch_interval: 60min
+backup_wal_archive_timeout: 3600s
 pg_autoctl_bin: /usr/bin/pg_autoctl
 pg_autoctl_service_name: pg_autoctl
 pg_auto_failover_db: pg_auto_failover

@@ -223,8 +223,13 @@ PostgreSQL WAL archiving is enabled on both data nodes:
 wal_level = replica
 archive_mode = on
 archive_command = '/usr/local/sbin/archive-wal "%p" "%f"'
-archive_timeout = 300s
+archive_timeout = 3600s
 ```
+
+`postgresql-wal-archive-hourly.timer` is enabled on both data nodes. Its
+failover-aware helper forces a WAL switch every 60 minutes only on the current
+primary; completed segments continue to transfer immediately through
+`archive_command`.
 
 WAL files are transferred using source-restricted SSH keys to:
 

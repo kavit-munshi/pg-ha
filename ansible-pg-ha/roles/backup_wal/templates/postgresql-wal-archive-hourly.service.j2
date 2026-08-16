@@ -1,0 +1,13 @@
+[Unit]
+Description=Force the active PostgreSQL primary to archive WAL hourly
+Documentation=man:postgres(1)
+After=pg_autoctl.service
+ConditionPathExists={{ pgdata_path }}/PG_VERSION
+
+[Service]
+Type=oneshot
+User=postgres
+Group=postgres
+ExecStart=/usr/local/sbin/force-wal-archive
+NoNewPrivileges=true
+PrivateTmp=true

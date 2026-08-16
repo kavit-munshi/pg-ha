@@ -170,7 +170,10 @@ ansible-pg-ha/
         │   └── main.yml
         └── templates/
             ├── archive-wal.sh.j2
+            ├── force-wal-archive.sh.j2
             ├── postgresql-archive.conf.j2
+            ├── postgresql-wal-archive-hourly.service.j2
+            ├── postgresql-wal-archive-hourly.timer.j2
             └── rubrik-rbs-hook.sh.j2
 ```
 
@@ -795,8 +798,15 @@ The archive file contains:
 wal_level = replica
 archive_mode = on
 archive_command = '/usr/local/sbin/archive-wal "%p" "%f"'
-archive_timeout = '300s'
+archive_timeout = '3600s'
 ```
+
+The role also installs `postgresql-wal-archive-hourly.timer` on both data
+nodes. Every 60 minutes its failover-aware helper checks
+`pg_is_in_recovery()`, exits on a standby, and calls `pg_switch_wal()` on the
+current primary. Completed segments still flow immediately through
+`archive_command`; the timer and `archive_timeout` ensure low-volume workloads
+close a partial segment at least hourly.
 
 The selected environment's monitor owns `/pgdata/WalArchive` as
 `postgres:postgres`, mode `0750`.
