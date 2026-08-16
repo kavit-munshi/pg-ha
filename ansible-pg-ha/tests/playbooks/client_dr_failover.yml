@@ -1,0 +1,74 @@
+---
+- name: Validate client DR and failover exercise authorization
+  hosts: all_nodes
+  gather_facts: false
+  become: false
+  pre_tasks:
+    - name: Load repository group variables
+      ansible.builtin.include_vars:
+        file: "{{ item }}"
+      loop:
+        - "{{ playbook_dir }}/../../group_vars/all.yml"
+        - "{{ playbook_dir }}/../../group_vars/{{ 'uat.yml' if 'uat' in group_names else 'prod.yml' }}"
+  tasks:
+    - name: Require explicit client exercise authorization
+      ansible.builtin.assert:
+        that:
+          - >-
+            (client_dr_confirmation | default('')) ==
+            ((deployment_environment | upper) ~ '-CLIENT-DR-FAILOVER')
+          - client_dr_test_id | default('') | length >= 8
+          - client_dr_test_id is match('^[A-Za-z0-9_.-]+$')
+        fail_msg: >-
+          Use tests/run_client_dr_failover.sh with an explicit INVENTORY and
+          type the requested environment-specific confirmation phrase.
+      run_once: true  # noqa: run-once[task]
+
+- name: Record client exercise start
+  hosts: db_monitor
+  gather_facts: false
+  become: false
+  tasks:
+    - name: Report exercise identity and scope
+      ansible.builtin.debug:
+        msg:
+          - "Exercise ID: {{ client_dr_test_id }}"
+          - "Environment: {{ deployment_environment }}"
+          - "Scope: health, WAL archive, routing failover, controlled database switchover, restoration"
+          - "This is not a destructive backup/PITR restore exercise."
+
+- name: Run baseline health validation
+  ansible.builtin.import_playbook: health.yml
+
+- name: Prove WAL archive recoverability input
+  ansible.builtin.import_playbook: wal_archive.yml
+  vars:
+    confirm_wal_archive_test: true
+
+- name: Exercise and restore routing failover
+  ansible.builtin.import_playbook: routing_failover.yml
+  vars:
+    confirm_routing_failover: true
+
+- name: Validate health after routing restoration
+  ansible.builtin.import_playbook: health.yml
+
+- name: Exercise and restore controlled database failover
+  ansible.builtin.import_playbook: db_failover.yml
+  vars:
+    confirm_db_failover: true
+
+- name: Run final restored-topology health validation
+  ansible.builtin.import_playbook: health.yml
+
+- name: Record client exercise completion
+  hosts: db_monitor
+  gather_facts: false
+  become: false
+  tasks:
+    - name: Report successful exercise completion
+      ansible.builtin.debug:
+        msg:
+          - "Exercise {{ client_dr_test_id }} completed successfully."
+          - "WAL, routing failover, database switchover, topology restoration, and final health passed."
+          - "Retain the wrapper evidence log with the client acceptance record."

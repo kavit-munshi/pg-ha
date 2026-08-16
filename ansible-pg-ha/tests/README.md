@@ -30,6 +30,7 @@ ansible-playbook -i "$INVENTORY" --syntax-check tests/playbooks/health.yml
 ansible-playbook -i "$INVENTORY" --syntax-check tests/playbooks/wal_archive.yml
 ansible-playbook -i "$INVENTORY" --syntax-check tests/playbooks/routing_failover.yml
 ansible-playbook -i "$INVENTORY" --syntax-check tests/playbooks/db_failover.yml
+ansible-playbook -i "$INVENTORY" --syntax-check tests/playbooks/client_dr_failover.yml
 ansible-lint --project-dir . tests
 ```
 
@@ -99,6 +100,24 @@ subtest does not prompt independently:
 export ANSIBLE_VAULT_PASSWORD_FILE=/secure/path/pg-ha-vault-password
 RUN_DISRUPTIVE=true bash tests/run_all.sh
 ```
+
+## Client-observed DR readiness and failover exercise
+
+The client exercise requires an explicit inventory and runs baseline health,
+WAL archive, routing failover/restoration, controlled database
+switchover/switchback, and final health in one Ansible process:
+
+```bash
+export INVENTORY="$PWD/inventories/uat_hosts.ini"
+export CLIENT_DR_TEST_ID="CHG123456-client-witnessed"
+bash tests/run_client_dr_failover.sh --ask-vault-pass
+```
+
+It requires typing `UAT-CLIENT-DR-FAILOVER` or
+`PROD-CLIENT-DR-FAILOVER` and writes a timestamped evidence log below
+`artifacts/client-dr/`. See `CLIENT_DR_FAILOVER_TEST_RUNBOOK.md` for manual
+commands, hold points, stop criteria, and the separate isolated backup/PITR DR
+test.
 
 ## Safety behavior
 
