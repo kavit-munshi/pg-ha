@@ -256,6 +256,12 @@ Each data node has a dedicated Ed25519 key. `archive_command` calls
 3. atomically renames it on the monitor;
 4. optionally invokes the Rubrik RBS hook.
 
+An enabled systemd timer runs `/usr/local/sbin/force-wal-archive` every 60
+minutes on both data nodes. The helper exits on a standby and forces a WAL
+switch only on the current primary, so the schedule follows pg_auto_failover
+promotion without inventory changes. Completed WAL files are still archived
+immediately; the hourly switch bounds the age of a partially filled segment.
+
 The durable configuration chain is:
 
 ```text
@@ -271,6 +277,15 @@ its base configuration. Required settings include `wal_level=replica`,
 WAL files alone are not a restorable backup. A tested base backup plus an
 unbroken WAL sequence and configuration recovery procedure are required for
 PITR.
+
+The approved target design is a daily, rate-limited PostgreSQL physical base
+backup initiated from the monitor/backup node against the dynamically detected
+primary. It uses plain-format `pg_basebackup`, streamed WAL, a SHA-256 backup
+manifest, `pg_verifybackup`, atomic publication, and Rubrik/off-host retention.
+Base backups should use a dedicated `/pgdata/BaseBackups` filesystem rather
+than competing with `/pgdata/WalArchive`. The implementation remains disabled
+until dedicated capacity, credentials, monitoring, retention, and an isolated
+restore test are approved. See `DB_BACKUP_AND_RECOVERY_RUNBOOK.md`, Section 5.4.
 
 ### 7.5 Network and firewall
 
@@ -935,6 +950,7 @@ after business approval and measured recovery exercises.
 | PgBouncer | `roles/pgbouncer` |
 | VIP and primary-aware routing | `roles/keepalived_haproxy` |
 | WAL archive/users/Rubrik hook | `roles/backup_wal` |
+| Database backup and recovery | `DB_BACKUP_AND_RECOVERY_RUNBOOK.md` |
 | Exporters/Logstash | `roles/monitoring_agents` |
 | Deployment procedure | `DEPLOYMENT_HOWTO.md` |
 | Code internals | `CODEBASE_ARCHITECTURE.md` |

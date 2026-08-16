@@ -1,0 +1,10 @@
+[Unit]
+Description=Run the PostgreSQL WAL archive switch every {{ backup_wal_force_switch_interval }}
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec={{ backup_wal_force_switch_interval }}
+Unit=postgresql-wal-archive-hourly.service
+
+[Install]
+WantedBy=timers.target

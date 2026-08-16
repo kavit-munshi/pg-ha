@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly psql_bin="/usr/lib/postgresql/{{ postgresql_version }}/bin/psql"
+readonly postgres_port="{{ postgresql_port }}"
+readonly lock_file="/run/postgresql/force-wal-archive.lock"
+
+exec 9>"${lock_file}"
+if ! /usr/bin/flock --nonblock 9; then
+  /usr/bin/logger --tag force-wal-archive \
+    "An earlier WAL switch request is still running"
+  exit 0
+fi
+
+recovery_state="$("${psql_bin}" \
+  --host=/var/run/postgresql \
+  --port="${postgres_port}" \
+  --dbname=postgres \
+  --no-psqlrc \
+  --tuples-only \
+  --no-align \
+  --command='SELECT pg_is_in_recovery();')"
+
+if [[ "${recovery_state}" == "t" ]]; then
+  /usr/bin/logger --tag force-wal-archive \
+    "Node is a standby; the hourly WAL switch is handled by the current primary"
+  exit 0
+fi
+
+wal_file="$("${psql_bin}" \
+  --host=/var/run/postgresql \
+  --port="${postgres_port}" \
+  --dbname=postgres \
+  --no-psqlrc \
+  --tuples-only \
+  --no-align \
+  --command='SELECT pg_walfile_name(pg_current_wal_lsn());')"
+
+switch_lsn="$("${psql_bin}" \
+  --host=/var/run/postgresql \
+  --port="${postgres_port}" \
+  --dbname=postgres \
+  --no-psqlrc \
+  --tuples-only \
+  --no-align \
+  --command='SELECT pg_switch_wal();')"
+
+/usr/bin/logger --tag force-wal-archive \
+  "Requested archive of WAL segment ${wal_file}; switch LSN ${switch_lsn}"

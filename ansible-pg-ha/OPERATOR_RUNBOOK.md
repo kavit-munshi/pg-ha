@@ -385,6 +385,19 @@ sudo -u postgres psql -d postgres -c \
   "SELECT archived_count, failed_count, last_archived_wal, last_failed_wal FROM pg_stat_archiver;"
 ```
 
+Verify the automatic 60-minute WAL switch timer on both data nodes:
+
+```bash
+systemctl status postgresql-wal-archive-hourly.timer --no-pager
+systemctl list-timers postgresql-wal-archive-hourly.timer --no-pager
+journalctl -u postgresql-wal-archive-hourly.service -n 20 --no-pager
+```
+
+The timer is installed on both data nodes so it follows a failover. Its script
+exits successfully on a standby and calls `pg_switch_wal()` only on the current
+primary. PostgreSQL continues to archive completed segments immediately; the
+hourly schedule limits how long a partially filled segment remains open.
+
 On the selected environment monitor:
 
 ```bash

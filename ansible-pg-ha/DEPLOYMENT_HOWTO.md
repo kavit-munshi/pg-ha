@@ -648,6 +648,20 @@ sudo -u postgres ls -lh /pgdata/WalArchive | tail
 
 `failed_count` should not increase and a new WAL segment should appear.
 
+Verify the 60-minute automatic WAL switch timer on both database data nodes:
+
+```bash
+ansible db_primary:db_standby -i "$INVENTORY" -b -m command \
+  -a "systemctl is-active postgresql-wal-archive-hourly.timer"
+
+ansible db_primary:db_standby -i "$INVENTORY" -b -m command \
+  -a "systemctl list-timers postgresql-wal-archive-hourly.timer --no-pager"
+```
+
+The timer runs on both candidates but forces `pg_switch_wal()` only on the
+current primary. The resulting completed segment is delivered by the existing
+continuous `archive_command` transport to the selected environment monitor.
+
 ### 8.12 Run the automated read-only health test
 
 The test wrappers default to UAT. Always set `INVENTORY` explicitly for

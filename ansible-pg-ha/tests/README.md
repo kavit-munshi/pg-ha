@@ -41,9 +41,9 @@ bash tests/run_health.sh --ask-vault-pass
 
 This validates SSH/facts, Chrony, UFW, `/etc/hosts` resolution, node exporter,
 database services, PostgreSQL readiness and recovery roles, XFS mounts, WAL
-settings, postgres exporter, pg_auto_failover state, Keepalived parsing, exact
-VIP ownership, PgBouncer, HAProxy stats, PgBouncer exporter, and a SQL query
-through VIP → HAProxy → PgBouncer → current primary.
+settings, the hourly WAL archive timer, postgres exporter, pg_auto_failover
+state, Keepalived parsing, exact VIP ownership, PgBouncer, HAProxy stats,
+PgBouncer exporter, and a SQL query through VIP → HAProxy → current primary.
 
 ## WAL archive integration test
 

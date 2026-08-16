@@ -231,10 +231,19 @@
     - name: Inspect WAL transport and Rubrik hook files
       ansible.builtin.stat:
         path: "{{ item }}"
-      loop:
-        - /usr/local/sbin/archive-wal
-        - /usr/local/sbin/rubrik-rbs-wal-hook
-        - /var/lib/postgresql/.ssh/id_ed25519_wal_archive
+      loop: >-
+        {{
+          [
+            '/usr/local/sbin/archive-wal',
+            '/usr/local/sbin/rubrik-rbs-wal-hook',
+            '/var/lib/postgresql/.ssh/id_ed25519_wal_archive'
+          ] +
+          (
+            ['/usr/local/sbin/force-wal-archive']
+            if backup_wal_force_switch_enabled | bool
+            else []
+          )
+        }}
       register: test_wal_integration_files
       when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
 
@@ -250,6 +259,19 @@
             (item.stat.mode | default('')) == '0600'
       loop: "{{ test_wal_integration_files.results }}"
       when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+
+    - name: Check hourly WAL archive timer
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-active
+          - postgresql-wal-archive-hourly.timer
+      register: test_wal_archive_timer
+      changed_when: false
+      failed_when: test_wal_archive_timer.stdout | trim != 'active'
+      when:
+        - inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+        - backup_wal_force_switch_enabled | bool
 
     - name: Require exactly one writable data node
       ansible.builtin.assert:
