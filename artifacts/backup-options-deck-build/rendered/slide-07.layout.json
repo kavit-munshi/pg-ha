@@ -1,0 +1,1356 @@
+{
+  "schema": "openai.presentation.layout/v4",
+  "unit": "px",
+  "slide": {
+    "aid": "sl/63flex",
+    "id": "63flex",
+    "slide": 7,
+    "layoutId": "fb41ebc0-713f-44f2-bc69-ba8ee9b98559",
+    "layoutName": "Title Slide",
+    "layoutType": "title",
+    "masterLayoutId": "3651ef42-df59-4910-9b4c-34e65f32bc85",
+    "masterLayoutName": "Master",
+    "backgroundColor": "#FFFFFF",
+    "frame": {
+      "left": 0,
+      "top": 0,
+      "width": 1280,
+      "height": 720
+    }
+  },
+  "theme": {
+    "colorSchemeName": "ChatGPT",
+    "colors": {
+      "accent1": "#156082",
+      "accent2": "#E97132",
+      "accent3": "#196B24",
+      "accent4": "#0F9ED5",
+      "accent5": "#A02B93",
+      "accent6": "#4EA72E",
+      "bg1": "#FFFFFF",
+      "bg2": "#000000",
+      "tx1": "#1F1F1F",
+      "tx2": "#FFFFFF",
+      "dk1": "#000000",
+      "lt1": "#FFFFFF",
+      "dk2": "#0E2841",
+      "lt2": "#E8E8E8",
+      "hlink": "#467886",
+      "folHlink": "#96607D"
+    },
+    "typefaces": [
+      "Arial"
+    ]
+  },
+  "inheritedLayers": [
+    {
+      "scope": "layout",
+      "id": "fb41ebc0-713f-44f2-bc69-ba8ee9b98559",
+      "name": "Title Slide",
+      "type": "title",
+      "parentLayoutId": "3651ef42-df59-4910-9b4c-34e65f32bc85",
+      "elements": []
+    },
+    {
+      "scope": "master",
+      "id": "3651ef42-df59-4910-9b4c-34e65f32bc85",
+      "name": "Master",
+      "type": "master",
+      "elements": []
+    }
+  ],
+  "elements": [
+    {
+      "order": 1,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/q5cr2hs7",
+      "id": "1",
+      "name": "title-7",
+      "bbox": [
+        56,
+        38,
+        1130,
+        78
+      ],
+      "geometry": "rect",
+      "text": "Product dependency trades off against operating burden",
+      "textPreview": "Product dependency trades off against operating burden",
+      "resolvedFontSize": 38,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 38,
+        "typeface": "Arial",
+        "color": "#0B1320",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Product dependency trades off against operating burden"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Product dependency trades off against operating burden",
+          "resolvedTextStyle": {
+            "fontSize": 38,
+            "typeface": "Arial",
+            "color": "#0B1320",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Product dependency trades off against operating burden",
+              "fontSize": 38,
+              "typeface": "Arial",
+              "color": "#0B1320",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 2,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/d83qxcry",
+      "id": "2",
+      "name": "title-rule-7",
+      "bbox": [
+        56,
+        122,
+        1168,
+        2
+      ],
+      "geometry": "rect",
+      "fillColor": "#0B1320",
+      "lineWidth": 0
+    },
+    {
+      "order": 3,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/c7u947ad",
+      "id": "3",
+      "name": "page-7",
+      "bbox": [
+        1180,
+        666,
+        44,
+        22
+      ],
+      "geometry": "rect",
+      "text": "07",
+      "textPreview": "07",
+      "resolvedFontSize": 13,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 13,
+        "typeface": "Arial",
+        "color": "#596273",
+        "alignment": "right",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "07"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "07",
+          "resolvedTextStyle": {
+            "fontSize": 13,
+            "typeface": "Arial",
+            "color": "#596273",
+            "alignment": "right"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "07",
+              "fontSize": 13,
+              "typeface": "Arial",
+              "color": "#596273",
+              "alignment": "right"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 4,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/32l8r29w",
+      "id": "4",
+      "name": "s7-lead",
+      "bbox": [
+        56,
+        145,
+        1120,
+        38
+      ],
+      "geometry": "rect",
+      "text": "Qualitative tendencies only; service levels must come from measured recovery tests.",
+      "textPreview": "Qualitative tendencies only; service levels must come from measured recovery tests.",
+      "resolvedFontSize": 19,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 19,
+        "typeface": "Arial",
+        "color": "#596273",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Qualitative tendencies only; service levels must come from measured recovery tests."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Qualitative tendencies only; service levels must come from measured recovery tests.",
+          "resolvedTextStyle": {
+            "fontSize": 19,
+            "typeface": "Arial",
+            "color": "#596273",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Qualitative tendencies only; service levels must come from measured recovery tests.",
+              "fontSize": 19,
+              "typeface": "Arial",
+              "color": "#596273",
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 5,
+      "kind": "table",
+      "scope": "slide",
+      "aid": "tb/rido76ho",
+      "id": "5",
+      "bbox": [
+        56,
+        205,
+        1168,
+        394
+      ],
+      "text": "Decision dimension | 1  Rubrik + native HA | 2  Rubrik + manual HA | 3  Ansible + manual base\nFailover awareness | Product-managed if proven | Shared orchestration | Custom discovery\nCustom automation | Lowest potential | Moderate | Highest\nOff-host protection | Rubrik policy | Rubrik policy | Separate target required\nMonitor recovery | Must be confirmed | Separate policy/runbook | Separate backup/rebuild\nRecovery ownership | Rubrik-led + DBA | Backup + DBA + VMware | DBA/automation-led\nPrimary uncertainty | Release/support evidence | Safe source and rejoin | Supportability/human error",
+      "textPreview": "Decision dimension | 1  Rubrik + native HA | 2  Rubrik + manual HA | 3  Ansible + manual base | Failover awareness | Product-managed if p...",
+      "rows": 7,
+      "cols": 4,
+      "cells": [
+        {
+          "index": 1,
+          "row": 1,
+          "column": 1,
+          "bbox": [
+            56,
+            205,
+            250,
+            56.29
+          ],
+          "text": "Decision dimension",
+          "textPreview": "Decision dimension",
+          "fillColor": "#0B1320",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Decision dimension",
+              "resolvedTextStyle": {
+                "fontSize": 17,
+                "typeface": "Arial",
+                "color": "#FFFFFF",
+                "bold": true
+              },
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Decision dimension",
+                  "fontSize": 17,
+                  "typeface": "Arial",
+                  "color": "#FFFFFF",
+                  "bold": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "row": 1,
+          "column": 2,
+          "bbox": [
+            306,
+            205,
+            306,
+            56.29
+          ],
+          "text": "1  Rubrik + native HA",
+          "textPreview": "1  Rubrik + native HA",
+          "fillColor": "#0B1320",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "1  Rubrik + native HA",
+              "resolvedTextStyle": {
+                "fontSize": 17,
+                "typeface": "Arial",
+                "color": "#FFFFFF",
+                "bold": true
+              },
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "1  Rubrik + native HA",
+                  "fontSize": 17,
+                  "typeface": "Arial",
+                  "color": "#FFFFFF",
+                  "bold": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "row": 1,
+          "column": 3,
+          "bbox": [
+            612,
+            205,
+            306,
+            56.29
+          ],
+          "text": "2  Rubrik + manual HA",
+          "textPreview": "2  Rubrik + manual HA",
+          "fillColor": "#0B1320",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "2  Rubrik + manual HA",
+              "resolvedTextStyle": {
+                "fontSize": 17,
+                "typeface": "Arial",
+                "color": "#FFFFFF",
+                "bold": true
+              },
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "2  Rubrik + manual HA",
+                  "fontSize": 17,
+                  "typeface": "Arial",
+                  "color": "#FFFFFF",
+                  "bold": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 4,
+          "row": 1,
+          "column": 4,
+          "bbox": [
+            918,
+            205,
+            306,
+            56.29
+          ],
+          "text": "3  Ansible + manual base",
+          "textPreview": "3  Ansible + manual base",
+          "fillColor": "#0B1320",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "3  Ansible + manual base",
+              "resolvedTextStyle": {
+                "fontSize": 17,
+                "typeface": "Arial",
+                "color": "#FFFFFF",
+                "bold": true
+              },
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "3  Ansible + manual base",
+                  "fontSize": 17,
+                  "typeface": "Arial",
+                  "color": "#FFFFFF",
+                  "bold": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 5,
+          "row": 2,
+          "column": 1,
+          "bbox": [
+            56,
+            261.29,
+            250,
+            56.29
+          ],
+          "text": "Failover awareness",
+          "textPreview": "Failover awareness",
+          "fillColor": "#FFFFFF",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Failover awareness",
+              "resolvedTextStyle": {
+                "fontSize": 16,
+                "typeface": "Arial",
+                "color": "#0B1320",
+                "bold": true
+              },
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Failover awareness",
+                  "fontSize": 16,
+                  "typeface": "Arial",
+                  "color": "#0B1320",
+                  "bold": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 6,
+          "row": 2,
+          "column": 2,
+          "bbox": [
+            306,
+            261.29,
+            306,
+            56.29
+          ],
+          "text": "Product-managed if proven",
+          "textPreview": "Product-managed if proven",
+          "fillColor": "#FFFFFF",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Product-managed if proven",
+              "resolvedTextStyle": {
+                "fontSize": 16,
+                "typeface": "Arial",
+                "color": "#0B1320"
+              },
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Product-managed if proven",
+                  "fontSize": 16,
+                  "typeface": "Arial",
+                  "color": "#0B1320"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 7,
+          "row": 2,
+          "column": 3,
+          "bbox": [
+            612,
+            261.29,
+            306,
+            56.29
+          ],
+          "text": "Shared orchestration",
+          "textPreview": "Shared orchestration",
+          "fillColor": "#FFFFFF",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Shared orchestration",
+              "resolvedTextStyle": {
+                "fontSize": 16,
+                "typeface": "Arial",
+                "color": "#0B1320"
+              },
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Shared orchestration",
+                  "fontSize": 16,
+                  "typeface": "Arial",
+                  "color": "#0B1320"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 8,
+          "row": 2,
+          "column": 4,
+          "bbox": [
+            918,
+            261.29,
+            306,
+            56.29
+          ],
+          "text": "Custom discovery",
+          "textPreview": "Custom discovery",
+          "fillColor": "#FFFFFF",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Custom discovery",
+              "resolvedTextStyle": {
+                "fontSize": 16,
+                "typeface": "Arial",
+                "color": "#0B1320"
+              },
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Custom discovery",
+                  "fontSize": 16,
+                  "typeface": "Arial",
+                  "color": "#0B1320"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 9,
+          "row": 3,
+          "column": 1,
+          "bbox": [
+            56,
+            317.57,
+            250,
+            56.29
+          ],
+          "text": "Custom automation",
+          "textPreview": "Custom automation",
+          "fillColor": "#F5F7F9",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Custom automation",
+              "resolvedTextStyle": {
+                "fontSize": 16,
+                "typeface": "Arial",
+                "color": "#0B1320",
+                "bold": true
+              },
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Custom automation",
+                  "fontSize": 16,
+                  "typeface": "Arial",
+                  "color": "#0B1320",
+                  "bold": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 10,
+          "row": 3,
+          "column": 2,
+          "bbox": [
+            306,
+            317.57,
+            306,
+            56.29
+          ],
+          "text": "Lowest potential",
+          "textPreview": "Lowest potential",
+          "fillColor": "#F5F7F9",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Lowest potential",
+              "resolvedTextStyle": {
+                "fontSize": 16,
+                "typeface": "Arial",
+                "color": "#0B1320"
+              },
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Lowest potential",
+                  "fontSize": 16,
+                  "typeface": "Arial",
+                  "color": "#0B1320"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 11,
+          "row": 3,
+          "column": 3,
+          "bbox": [
+            612,
+            317.57,
+            306,
+            56.29
+          ],
+          "text": "Moderate",
+          "textPreview": "Moderate",
+          "fillColor": "#F5F7F9",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Moderate",
+              "resolvedTextStyle": {
+                "fontSize": 16,
+                "typeface": "Arial",
+                "color": "#0B1320"
+              },
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Moderate",
+                  "fontSize": 16,
+                  "typeface": "Arial",
+                  "color": "#0B1320"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 12,
+          "row": 3,
+          "column": 4,
+          "bbox": [
+            918,
+            317.57,
+            306,
+            56.29
+          ],
+          "text": "Highest",
+          "textPreview": "Highest",
+          "fillColor": "#F5F7F9",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Highest",
+              "resolvedTextStyle": {
+                "fontSize": 16,
+                "typeface": "Arial",
+                "color": "#0B1320"
+              },
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Highest",
+                  "fontSize": 16,
+                  "typeface": "Arial",
+                  "color": "#0B1320"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 13,
+          "row": 4,
+          "column": 1,
+          "bbox": [
+            56,
+            373.86,
+            250,
+            56.29
+          ],
+          "text": "Off-host protection",
+          "textPreview": "Off-host protection",
+          "fillColor": "#FFFFFF",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Off-host protection",
+              "resolvedTextStyle": {
+                "fontSize": 16,
+                "typeface": "Arial",
+                "color": "#0B1320",
+                "bold": true
+              },
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Off-host protection",
+                  "fontSize": 16,
+                  "typeface": "Arial",
+                  "color": "#0B1320",
+                  "bold": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 14,
+          "row": 4,
+          "column": 2,
+          "bbox": [
+            306,
+            373.86,
+            306,
+            56.29
+          ],
+          "text": "Rubrik policy",
+          "textPreview": "Rubrik policy",
+          "fillColor": "#FFFFFF",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Rubrik policy",
+              "resolvedTextStyle": {
+                "fontSize": 16,
+                "typeface": "Arial",
+                "color": "#0B1320"
+              },
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Rubrik policy",
+                  "fontSize": 16,
+                  "typeface": "Arial",
+                  "color": "#0B1320"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 15,
+          "row": 4,
+          "column": 3,
+          "bbox": [
+            612,
+            373.86,
+            306,
+            56.29
+          ],
+          "text": "Rubrik policy",
+          "textPreview": "Rubrik policy",
+          "fillColor": "#FFFFFF",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Rubrik policy",
+              "resolvedTextStyle": {
+                "fontSize": 16,
+                "typeface": "Arial",
+                "color": "#0B1320"
+              },
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Rubrik policy",
+                  "fontSize": 16,
+                  "typeface": "Arial",
+                  "color": "#0B1320"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 16,
+          "row": 4,
+          "column": 4,
+          "bbox": [
+            918,
+            373.86,
+            306,
+            56.29
+          ],
+          "text": "Separate target required",
+          "textPreview": "Separate target required",
+          "fillColor": "#FFFFFF",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Separate target required",
+              "resolvedTextStyle": {
+                "fontSize": 16,
+                "typeface": "Arial",
+                "color": "#0B1320"
+              },
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Separate target required",
+                  "fontSize": 16,
+                  "typeface": "Arial",
+                  "color": "#0B1320"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 17,
+          "row": 5,
+          "column": 1,
+          "bbox": [
+            56,
+            430.14,
+            250,
+            56.29
+          ],
+          "text": "Monitor recovery",
+          "textPreview": "Monitor recovery",
+          "fillColor": "#F5F7F9",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Monitor recovery",
+              "resolvedTextStyle": {
+                "fontSize": 16,
+                "typeface": "Arial",
+                "color": "#0B1320",
+                "bold": true
+              },
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Monitor recovery",
+                  "fontSize": 16,
+                  "typeface": "Arial",
+                  "color": "#0B1320",
+                  "bold": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 18,
+          "row": 5,
+          "column": 2,
+          "bbox": [
+            306,
+            430.14,
+            306,
+            56.29
+          ],
+          "text": "Must be confirmed",
+          "textPreview": "Must be confirmed",
+          "fillColor": "#F5F7F9",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Must be confirmed",
+              "resolvedTextStyle": {
+                "fontSize": 16,
+                "typeface": "Arial",
+                "color": "#0B1320"
+              },
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Must be confirmed",
+                  "fontSize": 16,
+                  "typeface": "Arial",
+                  "color": "#0B1320"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 19,
+          "row": 5,
+          "column": 3,
+          "bbox": [
+            612,
+            430.14,
+            306,
+            56.29
+          ],
+          "text": "Separate policy/runbook",
+          "textPreview": "Separate policy/runbook",
+          "fillColor": "#F5F7F9",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Separate policy/runbook",
+              "resolvedTextStyle": {
+                "fontSize": 16,
+                "typeface": "Arial",
+                "color": "#0B1320"
+              },
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Separate policy/runbook",
+                  "fontSize": 16,
+                  "typeface": "Arial",
+                  "color": "#0B1320"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 20,
+          "row": 5,
+          "column": 4,
+          "bbox": [
+            918,
+            430.14,
+            306,
+            56.29
+          ],
+          "text": "Separate backup/rebuild",
+          "textPreview": "Separate backup/rebuild",
+          "fillColor": "#F5F7F9",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Separate backup/rebuild",
+              "resolvedTextStyle": {
+                "fontSize": 16,
+                "typeface": "Arial",
+                "color": "#0B1320"
+              },
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Separate backup/rebuild",
+                  "fontSize": 16,
+                  "typeface": "Arial",
+                  "color": "#0B1320"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 21,
+          "row": 6,
+          "column": 1,
+          "bbox": [
+            56,
+            486.43,
+            250,
+            56.29
+          ],
+          "text": "Recovery ownership",
+          "textPreview": "Recovery ownership",
+          "fillColor": "#FFFFFF",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Recovery ownership",
+              "resolvedTextStyle": {
+                "fontSize": 16,
+                "typeface": "Arial",
+                "color": "#0B1320",
+                "bold": true
+              },
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Recovery ownership",
+                  "fontSize": 16,
+                  "typeface": "Arial",
+                  "color": "#0B1320",
+                  "bold": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 22,
+          "row": 6,
+          "column": 2,
+          "bbox": [
+            306,
+            486.43,
+            306,
+            56.29
+          ],
+          "text": "Rubrik-led + DBA",
+          "textPreview": "Rubrik-led + DBA",
+          "fillColor": "#FFFFFF",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Rubrik-led + DBA",
+              "resolvedTextStyle": {
+                "fontSize": 16,
+                "typeface": "Arial",
+                "color": "#0B1320"
+              },
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Rubrik-led + DBA",
+                  "fontSize": 16,
+                  "typeface": "Arial",
+                  "color": "#0B1320"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 23,
+          "row": 6,
+          "column": 3,
+          "bbox": [
+            612,
+            486.43,
+            306,
+            56.29
+          ],
+          "text": "Backup + DBA + VMware",
+          "textPreview": "Backup + DBA + VMware",
+          "fillColor": "#FFFFFF",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Backup + DBA + VMware",
+              "resolvedTextStyle": {
+                "fontSize": 16,
+                "typeface": "Arial",
+                "color": "#0B1320"
+              },
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Backup + DBA + VMware",
+                  "fontSize": 16,
+                  "typeface": "Arial",
+                  "color": "#0B1320"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 24,
+          "row": 6,
+          "column": 4,
+          "bbox": [
+            918,
+            486.43,
+            306,
+            56.29
+          ],
+          "text": "DBA/automation-led",
+          "textPreview": "DBA/automation-led",
+          "fillColor": "#FFFFFF",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "DBA/automation-led",
+              "resolvedTextStyle": {
+                "fontSize": 16,
+                "typeface": "Arial",
+                "color": "#0B1320"
+              },
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "DBA/automation-led",
+                  "fontSize": 16,
+                  "typeface": "Arial",
+                  "color": "#0B1320"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 25,
+          "row": 7,
+          "column": 1,
+          "bbox": [
+            56,
+            542.71,
+            250,
+            56.29
+          ],
+          "text": "Primary uncertainty",
+          "textPreview": "Primary uncertainty",
+          "fillColor": "#F5F7F9",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Primary uncertainty",
+              "resolvedTextStyle": {
+                "fontSize": 16,
+                "typeface": "Arial",
+                "color": "#0B1320",
+                "bold": true
+              },
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Primary uncertainty",
+                  "fontSize": 16,
+                  "typeface": "Arial",
+                  "color": "#0B1320",
+                  "bold": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 26,
+          "row": 7,
+          "column": 2,
+          "bbox": [
+            306,
+            542.71,
+            306,
+            56.29
+          ],
+          "text": "Release/support evidence",
+          "textPreview": "Release/support evidence",
+          "fillColor": "#F5F7F9",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Release/support evidence",
+              "resolvedTextStyle": {
+                "fontSize": 16,
+                "typeface": "Arial",
+                "color": "#0B1320"
+              },
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Release/support evidence",
+                  "fontSize": 16,
+                  "typeface": "Arial",
+                  "color": "#0B1320"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 27,
+          "row": 7,
+          "column": 3,
+          "bbox": [
+            612,
+            542.71,
+            306,
+            56.29
+          ],
+          "text": "Safe source and rejoin",
+          "textPreview": "Safe source and rejoin",
+          "fillColor": "#F5F7F9",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Safe source and rejoin",
+              "resolvedTextStyle": {
+                "fontSize": 16,
+                "typeface": "Arial",
+                "color": "#0B1320"
+              },
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Safe source and rejoin",
+                  "fontSize": 16,
+                  "typeface": "Arial",
+                  "color": "#0B1320"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 28,
+          "row": 7,
+          "column": 4,
+          "bbox": [
+            918,
+            542.71,
+            306,
+            56.29
+          ],
+          "text": "Supportability/human error",
+          "textPreview": "Supportability/human error",
+          "fillColor": "#F5F7F9",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Supportability/human error",
+              "resolvedTextStyle": {
+                "fontSize": 16,
+                "typeface": "Arial",
+                "color": "#0B1320"
+              },
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Supportability/human error",
+                  "fontSize": 16,
+                  "typeface": "Arial",
+                  "color": "#0B1320"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "order": 6,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/p43qtcr2",
+      "id": "6",
+      "name": "s7-caution",
+      "bbox": [
+        56,
+        622,
+        8,
+        36
+      ],
+      "geometry": "rect",
+      "fillColor": "#F5B942",
+      "lineWidth": 0
+    },
+    {
+      "order": 7,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/o3u907ah",
+      "id": "7",
+      "name": "s7-caution-text",
+      "bbox": [
+        80,
+        620,
+        1080,
+        38
+      ],
+      "geometry": "rect",
+      "text": "No RPO/RTO commitment should be inferred from this table.",
+      "textPreview": "No RPO/RTO commitment should be inferred from this table.",
+      "resolvedFontSize": 18,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 18,
+        "typeface": "Arial",
+        "color": "#0B1320",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "No RPO/RTO commitment should be inferred from this table."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "No RPO/RTO commitment should be inferred from this table.",
+          "resolvedTextStyle": {
+            "fontSize": 18,
+            "typeface": "Arial",
+            "color": "#0B1320",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "No RPO/RTO commitment should be inferred from this table.",
+              "fontSize": 18,
+              "typeface": "Arial",
+              "color": "#0B1320",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    }
+  ],
+  "composeRuns": []
+}

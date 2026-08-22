@@ -21,9 +21,28 @@ pginstance_path: /pgdata/dbinst
 pg_autoctl_config_path: "/var/lib/postgresql/.config/pg_autoctl{{ pgdata_path }}/pg_autoctl.cfg"
 wal_archive_path: /pgdata/WalArchive
 wal_archive_ssh_group: postgres-wal-ssh
+# Selects the owner of PostgreSQL archived-WAL protection. Supported values:
+#   monitor_ssh - legacy Ansible SSH/rsync archive on the monitor node
+#   rubrik      - Rubrik owns archive_mode/archive_command and WAL retention
+#   none        - no archived-WAL provider (streaming replication still uses WAL)
+# New environments default to no provider and must opt in deliberately.
+postgresql_wal_archive_provider: none
+# Explicit safety gate. Set true only after the selected environment has a
+# successful Rubrik base backup and durable Rubrik WAL configuration on both
+# data candidates. The cleanup role refuses to make changes while false.
+rubrik_wal_cutover_confirmed: false
+# Emergency override for removing the legacy monitor WAL integration before
+# Rubrik readiness can be confirmed. This bypasses only the cleanup gates and
+# provider validation; it does not claim that backups are healthy. Keep false
+# for normal deployments and pass true only through an approved change.
+wal_archive_cleanup_force: false
+# Optional regular expression used to identify the Rubrik archive command.
+# Leave empty when the Rubrik command varies by release; health tests still
+# require a nonempty, non-legacy command when the provider is rubrik.
+rubrik_archive_command_validation_pattern: ""
 # Completed WAL segments are still shipped immediately by archive_command.
 # This interval forces the active primary to close a partially filled segment
-# at least once per hour so low-volume databases meet the archive schedule.
+# at least once per hour when the legacy monitor_ssh provider is selected.
 backup_wal_force_switch_enabled: true
 backup_wal_force_switch_interval: 60min
 backup_wal_archive_timeout: 3600s

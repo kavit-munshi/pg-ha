@@ -18,12 +18,12 @@ nodes use PostgreSQL 18 from the official PGDG repository.
 |---|---|---|---|---|
 | UAT | `db_primary` | `BHC-QMSSQLU05` | `192.168.129.105` | Initial PostgreSQL primary |
 | UAT | `db_standby` | `BHC-QMSSQLU06` | `192.168.129.106` | Initial synchronous standby |
-| UAT | `db_monitor` | `BHC-QMSSQLU07` | `192.168.129.107` | pg_auto_failover monitor and WAL archive |
+| UAT | `db_monitor` | `BHC-QMSSQLU07` | `192.168.129.107` | pg_auto_failover monitor; retained legacy archive storage |
 | UAT | `routing_nodes` | `BHC-PGBSQLU03` | `192.168.129.108` | PgBouncer/HAProxy and initial VIP MASTER |
 | UAT | `routing_nodes` | `BHC-PGBSQLU04` | `192.168.129.109` | PgBouncer/HAProxy and initial VIP BACKUP |
 | Production | `db_primary` | `BHC-QMSSQLP01.bayshore.ca` | `192.168.128.134` | Initial PostgreSQL primary |
 | Production | `db_standby` | `BHC-QMSSQLP02.bayshore.ca` | `192.168.128.135` | Initial synchronous standby |
-| Production | `db_monitor` | `BHC-QMSSQLP03.bayshore.ca` | `192.168.128.136` | pg_auto_failover monitor and WAL archive |
+| Production | `db_monitor` | `BHC-QMSSQLP03.bayshore.ca` | `192.168.128.136` | pg_auto_failover monitor; retained legacy archive storage |
 | Production | `routing_nodes` | `BHC-PGBSQLP01` (`BHC-PGBSQLP01.bayshore.ca`) | `192.168.128.137` | PgBouncer/HAProxy and initial VIP MASTER |
 | Production | `routing_nodes` | `BHC-PGBSQLP02` (`BHC-PGBSQLP02.bayshore.ca`) | `192.168.128.138` | PgBouncer/HAProxy and initial VIP BACKUP |
 
@@ -88,6 +88,8 @@ ansible-pg-ha/
 ├── OPERATOR_RUNBOOK.md
 ├── DEPLOYMENT_HOWTO.md
 ├── CODEBASE_ARCHITECTURE.md
+├── DB_BACKUP_AND_RECOVERY_RUNBOOK.md
+├── RUBRIK_WAL_CUTOVER_AND_DR_RUNBOOK.md
 ├── inventories/
 │   ├── uat_hosts.ini
 │   └── prod_hosts.ini
@@ -101,12 +103,14 @@ ansible-pg-ha/
 │   ├── run_wal_archive_test.sh
 │   ├── run_routing_failover.sh
 │   ├── run_db_failover.sh
+│   ├── run_client_dr_failover.sh
 │   ├── run_all.sh
 │   └── playbooks/
 │       ├── health.yml
 │       ├── wal_archive.yml
 │       ├── routing_failover.yml
-│       └── db_failover.yml
+│       ├── db_failover.yml
+│       └── client_dr_failover.yml
 └── roles/
     ├── push_ssh_keys/
     │   └── tasks/
@@ -163,7 +167,10 @@ ansible-pg-ha/
     │       ├── pgbouncer-exporter.pgpass.j2
     │       ├── postgres-exporter.env.j2
     │       └── prometheus-pgbouncer-exporter.service.j2
-    └── backup_wal/
+    ├── database_bootstrap/
+    │   └── tasks/
+    │       └── main.yml
+    ├── backup_wal/
         ├── handlers/
         │   └── main.yml
         ├── tasks/
@@ -175,6 +182,11 @@ ansible-pg-ha/
             ├── postgresql-wal-archive-hourly.service.j2
             ├── postgresql-wal-archive-hourly.timer.j2
             └── rubrik-rbs-hook.sh.j2
+    └── wal_archive_cleanup/
+        ├── handlers/
+        │   └── main.yml
+        └── tasks/
+            └── main.yml
 ```
 
 Secret values can be stored as inline `!vault` scalars in `uat.yml` and
@@ -368,7 +380,7 @@ initial primary
 standby
     |
     v
-database users and WAL archive (serial: 1)
+database users -> selected backup provider/legacy cleanup (serial: 1)
     |
     v
 PgBouncer -> HAProxy/Keepalived
@@ -751,74 +763,60 @@ group `haproxy`. The template task uses `no_log`.
 HAProxy configuration is validated with `haproxy -c` before replacement.
 HAProxy is started before Keepalived.
 
-## 8.8 `backup_wal`
+## 8.8 Database bootstrap and backup-provider roles
 
 Target: database and monitor hosts with `serial: 1`.
 
-### Database principals
+### `database_bootstrap`
 
-On the initial primary, the role:
+Database principals are independent of backup selection. The role creates the
+application database/login, HAProxy health login, PostgreSQL exporter login,
+and required exporter membership. Disabling the legacy WAL provider therefore
+cannot omit database accounts.
 
-- creates `qms_app`;
-- creates the `qms` database owned by `qms_app`;
-- creates `haproxy_check`;
-- creates `postgres_exporter`;
-- grants `pg_monitor` to the exporter.
+### Provider model
 
-On the monitor database, it creates the exporter and grants `pg_monitor`.
-Physical replication carries primary-side roles/database to the standby.
+`postgresql_wal_archive_provider` accepts `rubrik`, `monitor_ssh`, or `none`.
+UAT and Production use `rubrik`; the safe global default for new environments
+is `none`.
 
-### WAL transport
+### `backup_wal`
 
-On both data nodes in the selected environment:
+This role now represents only the optional legacy `monitor_ssh` provider. It
+installs the SSH/rsync archive helper, durable archive include, monitor archive
+transport, and optional forced-switch timer. `site.yml` does not execute it for
+Rubrik-managed environments.
 
-1. creates `/var/lib/postgresql/.ssh`;
-2. generates a dedicated Ed25519 archive key;
-3. creates the dedicated `postgres-wal-ssh` authorization group on the monitor;
-4. adds the monitor's `postgres` account to that group and permits the group through
-   the hardened SSH `AllowGroups` policy;
-5. delegates each public key to the monitor, restricted to its originating SQL-node IP;
-6. verifies both key presence and noninteractive archive-directory access;
-7. scans and pins the monitor's SSH host key;
-8. installs `/usr/local/sbin/archive-wal`.
+### `wal_archive_cleanup`
 
-The archive script:
+For `rubrik` or `none`, this role:
 
-- exits successfully when the final segment already exists;
-- rsyncs to `<segment>.partial`;
-- atomically renames the remote file;
-- optionally invokes the Rubrik hook.
+1. stops and disables the legacy forced-switch timer;
+2. removes legacy helper, timer/service, placeholder, archive include and
+   `postgresql-archive.conf` files;
+3. reloads systemd and restarts pg_autoctl only for PostgreSQL config changes;
+4. waits for PostgreSQL readiness;
+5. requires `wal_level=replica`;
+6. for Rubrik, requires `archive_mode=on` and a nonempty archive command that
+   does not reference `archive-wal`;
+7. for `none`, requires `archive_mode=off`.
 
-The role deploys `postgresql-archive.conf` and ensures the durable
-`postgresql-ha.conf` includes it. This avoids writing archive settings into
-`postgresql.conf`, which pg_autoctl may regenerate during state transitions.
-The archive file contains:
+Cleanup deliberately retains WAL SSH private/public keys, matching monitor
+`authorized_keys` entries, the SSH authorization group/policy,
+`/pgdata/WalArchive`, its mount and existing archive files. Removal of those
+rollback assets requires a separate authorized change.
 
-```text
-wal_level = replica
-archive_mode = on
-archive_command = '/usr/local/sbin/archive-wal "%p" "%f"'
-archive_timeout = '3600s'
-```
+Ansible does not generate or guess Rubrik's archive command. Rubrik must place
+its durable configuration before cleanup. The optional
+`rubrik_archive_command_validation_pattern` can enforce a vendor-approved
+command signature. `rubrik_wal_cutover_confirmed=false` is the default safety
+gate; the operator must explicitly set it true after confirming the initial
+Rubrik base backup and durable WAL configuration.
 
-The role also installs `postgresql-wal-archive-hourly.timer` on both data
-nodes. Every 60 minutes its failover-aware helper checks
-`pg_is_in_recovery()`, exits on a standby, and calls `pg_switch_wal()` on the
-current primary. Completed segments still flow immediately through
-`archive_command`; the timer and `archive_timeout` ensure low-volume workloads
-close a partial segment at least hourly.
-
-The selected environment's monitor owns `/pgdata/WalArchive` as
-`postgres:postgres`, mode `0750`.
-
-### Rubrik
-
-`rubrik_rbs_enabled` defaults to false. The installed
-`/usr/local/sbin/rubrik-rbs-wal-hook` exits successfully until enabled.
-`rubrik_rbs_hook_command` is the integration command placeholder.
-
-The hook is not a replacement for a tested backup/restore design. Recovery
-procedures, retention, and restore validation remain operational requirements.
+`wal_archive_cleanup_force=false` is a separate break-glass control. When true,
+cleanup bypasses readiness and provider assertions but still reports the
+effective archive state. It does not alter health-test expectations or delete
+SSH keys/archive data, so an unprotected forced state remains visible.
 
 ## 8.9 `monitoring_agents`
 
@@ -861,10 +859,10 @@ the single owner of inbound rules.
 | `/etc/sysctl.conf` managed keys | `os_tuning` |
 | `/etc/security/limits.conf` managed blocks | `os_tuning` |
 | `/etc/systemd/system/pg_autoctl.service` | `pg_auto_failover` |
-| `/pgdata/pgroot/data/postgresql-ha.conf` | `pg_auto_failover`; archive include also enforced by `backup_wal` |
-| `/pgdata/pgroot/data/postgresql-archive.conf` | `backup_wal` |
-| `/usr/local/sbin/archive-wal` | `backup_wal` |
-| `/usr/local/sbin/rubrik-rbs-wal-hook` | `backup_wal` |
+| `/pgdata/pgroot/data/postgresql-ha.conf` | `pg_auto_failover`; legacy include is provider-conditional |
+| `/pgdata/pgroot/data/postgresql-archive.conf` | `backup_wal` for `monitor_ssh`; removed by `wal_archive_cleanup` otherwise |
+| `/usr/local/sbin/archive-wal` | optional `backup_wal`; removed by `wal_archive_cleanup` |
+| `/usr/local/sbin/rubrik-rbs-wal-hook` | retired legacy placeholder; removed by `wal_archive_cleanup` |
 | `/etc/pgbouncer/pgbouncer.ini` | `pgbouncer` |
 | `/etc/pgbouncer/userlist.txt` | `pgbouncer` |
 | `/etc/pgbouncer/pgbouncer.key/.crt` | `pgbouncer` |
@@ -883,7 +881,7 @@ the single owner of inbound rules.
 | Service | Owner | Restart trigger |
 |---|---|---|
 | `chrony` | `os_tuning` | Chrony template change |
-| `pg_autoctl` | `pg_auto_failover`, `backup_wal` | systemd/PostgreSQL/archive config change |
+| `pg_autoctl` | `pg_auto_failover`, `backup_wal`, `wal_archive_cleanup` | systemd/PostgreSQL/provider config change |
 | `pgbouncer` | `pgbouncer` | pool config, userlist, TLS, systemd override |
 | `haproxy` | `keepalived_haproxy` | HAProxy config/check credential/script |
 | `keepalived` | `keepalived_haproxy` | Keepalived config/tracking script |
@@ -971,7 +969,8 @@ Preferred extension patterns:
 - add secrets under encrypted environment subdirectories;
 - add firewall exceptions only to `ufw_firewall`;
 - add PostgreSQL tuning to `postgresql-ha.conf.j2`;
-- add archive behavior through the Rubrik hook interface;
+- integrate Rubrik only through its vendor-supported agent/configuration and
+  keep provider validation in `wal_archive_cleanup`;
 - add new exporter configuration under `monitoring_agents`;
 - preserve monitor → primary → standby play order;
 - preserve HAProxy-before-Keepalived startup.

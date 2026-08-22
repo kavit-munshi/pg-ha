@@ -15,7 +15,10 @@
       ansible.builtin.assert:
         that:
           - confirm_wal_archive_test | default(false) | bool
-        fail_msg: Use tests/run_wal_archive_test.sh to run this test.
+          - postgresql_wal_archive_provider == 'monitor_ssh'
+        fail_msg: >-
+          This test is only valid when postgresql_wal_archive_provider is
+          monitor_ssh. Rubrik backup and PITR evidence is validated in Rubrik.
       run_once: true  # noqa: run-once[task]
 
     - name: Query local recovery state

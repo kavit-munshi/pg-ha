@@ -1,0 +1,34 @@
+Communication job: By the end, client executives, infrastructure leaders,
+DBAs, and backup owners should understand the operational trade-offs among
+three backup models and authorize a common proof-of-recovery exercise rather
+than selecting an option on unverified assumptions.
+
+Narrative: current state and stakes -> non-negotiable recovery chain -> each
+option -> neutral comparison -> failure implications -> common proof plan ->
+decision gates.
+
+Visual route: bundled Codex Grid layout library. Composition references:
+slide 01 sparse cover, slide 07 three-column option landscape, slide 14 table
+evidence, and slide 17 timeline. White canvas, black type, gray structural
+regions, blue accent.
+
+Repository sources:
+- ansible-pg-ha/DB_BACKUP_AND_RECOVERY_RUNBOOK.md
+- ansible-pg-ha/SYSTEM_ARCHITECTURE_AND_RECOVERY.md
+- ansible-pg-ha/CODEBASE_ARCHITECTURE.md
+
+External sources:
+- https://docs.rubrik.com/en-us/compat_matrix/compat_matrix/cm_postgresql_protection.html
+- https://docs.rubrik.com/en-us/saas/postgresql/postgresql.html
+- https://docs.rubrik.com/en-us/saas/postgresql/postgresql_protection_prereq.html
+- https://docs.rubrik.com/en-us/saas/postgresql/postgresql_limitations.html
+- https://developer.rubrik.com/Rubrik-Security-Cloud-API/Data-Protection/Data-Center/PostgreSQL/
+- https://www.postgresql.org/docs/18/continuous-archiving.html
+- https://www.postgresql.org/docs/18/app-pgbasebackup.html
+
+Research caution: the current public Rubrik compatibility page found in this
+review lists Community PostgreSQL versions through 17. The user-supplied
+statement about a new release with pg_auto_failover integration is treated as
+a conditional assumption requiring written vendor confirmation for the exact
+release, PostgreSQL 18, Ubuntu 24.04, role-change behavior, monitor recovery,
+and restore workflow.

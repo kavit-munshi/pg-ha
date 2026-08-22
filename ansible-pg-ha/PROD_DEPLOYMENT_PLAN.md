@@ -14,7 +14,11 @@ No Production password is stored in this document.
 |---|---|---:|---|
 | `db_primary` | `BHC-QMSSQLP01.bayshore.ca` | `192.168.128.134` | PostgreSQL primary |
 | `db_standby` | `BHC-QMSSQLP02.bayshore.ca` | `192.168.128.135` | Synchronous standby |
-| `db_monitor` | `BHC-QMSSQLP03.bayshore.ca` | `192.168.128.136` | pg_auto_failover monitor and WAL archive |
+| `db_monitor` | `BHC-QMSSQLP03.bayshore.ca` | `192.168.128.136` | pg_auto_failover monitor |
+
+Rubrik is the Production database and archived-WAL protection owner. The
+legacy monitor archive must remain disabled except during an approved rollback;
+see `RUBRIK_WAL_CUTOVER_AND_DR_RUNBOOK.md`.
 | `routing_nodes` | `BHC-PGBSQLP01` | `192.168.128.137` | Preferred VIP owner, HAProxy, PgBouncer |
 | `routing_nodes` | `BHC-PGBSQLP02` | `192.168.128.138` | Backup VIP owner, HAProxy, PgBouncer |
 
@@ -178,7 +182,7 @@ Confirm these flows:
 | Cluster nodes | DB/monitor nodes | TCP/5432 | PostgreSQL, replication, monitor |
 | Routing peers | Routing peers | VRRP/112 | VIP heartbeat |
 | Approved management network | all five nodes | TCP/22 | Administration/Ansible |
-| Data nodes | monitor | TCP/22 | Restricted WAL archive keys |
+| Data nodes | monitor | TCP/22 | Retained rollback keys; not active WAL transport |
 | All nodes | approved NTP | UDP/123 | Clock synchronization |
 
 Update `ufw_ssh_allowed_cidrs` before Production if SSH must not remain open
@@ -189,8 +193,10 @@ from any source.
 - `BHC-PGMSQLP01` must be configured separately with scrape targets.
 - Logstash forwarding is disabled. `logstash_ip` remains `CHANGE_ME` and is not
   used while `configure_logstash_forwarding` is false.
-- Rubrik RBS integration is disabled until the backup team approves and
-  configures the agent and hook.
+- Rubrik must be installed, approved and have a successful base backup plus
+  durable WAL configuration before `rubrik_wal_cutover_confirmed=true` is used.
+- Add only the vendor-approved Rubrik firewall sources, directions and ports;
+  do not open broad inbound rules without the final network design.
 - Enterprise CA certificates are not currently provided; generated
   certificates are self-signed.
 
@@ -276,11 +282,9 @@ Run read-only health validation:
 bash tests/run_health.sh --ask-vault-pass
 ```
 
-Run WAL archive validation:
-
-```bash
-bash tests/run_wal_archive_test.sh --ask-vault-pass
-```
+Confirm the latest successful Rubrik base backup and WAL/log recovery point.
+Do not run the legacy monitor-WAL test while the Production provider is Rubrik.
+Follow `RUBRIK_WAL_CUTOVER_AND_DR_RUNBOOK.md` for cutover and restore evidence.
 
 During an approved disruptive-test window:
 

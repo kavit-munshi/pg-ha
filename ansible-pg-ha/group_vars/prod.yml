@@ -1,5 +1,9 @@
 ---
 deployment_environment: prod
+# Rubrik is the sole archived-WAL and database-backup provider. The legacy
+# monitor SSH archive is removed but its SSH keys are retained for rollback.
+postgresql_wal_archive_provider: rubrik
+rubrik_wal_cutover_confirmed: false
 # Production storage is reported as pre-provisioned only after the storage team
 # confirms every LVM, XFS, mount, and fstab entry. Keep false to prevent Ansible
 # from repartitioning disks during the initial Production deployment.

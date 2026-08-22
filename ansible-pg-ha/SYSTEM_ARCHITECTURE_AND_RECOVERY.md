@@ -16,6 +16,12 @@ consolidates material from `README.md`, `CODEBASE_ARCHITECTURE.md`,
 `DEPLOYMENT_HOWTO.md`, `OPERATOR_RUNBOOK.md`, inventories, group variables,
 Ansible roles/templates, and the project test framework.
 
+> **Current backup authority:** Rubrik is the sole database and archived-WAL
+> provider for UAT and Production. The former SSH archive to the monitor is an
+> optional, default-off rollback provider. Current cutover and database DR
+> procedures are in `RUBRIK_WAL_CUTOVER_AND_DR_RUNBOOK.md`; any later section
+> describing the monitor archive documents the retained legacy option only.
+
 The existing documents remain useful for their narrower purposes:
 
 - `DEPLOYMENT_HOWTO.md`: initial deployment and verification;
@@ -241,51 +247,28 @@ bind-mounted at `$PGDATA/pg_wal`. Keeping `data` and sibling `backup` on the
 same XFS filesystem permits pg_autoctl to atomically rename a completed base
 backup into place.
 
-The monitor owns `/pgdata/WalArchive`. Production P03 uses the pre-provisioned
-405 GB `/dev/sdc1` XFS filesystem for this mount. Each routing node has one
+The monitor retains the legacy `/pgdata/WalArchive` filesystem without using
+it as an active Rubrik backup target. Production P03 uses the pre-provisioned
+405 GB `/dev/sdc1` XFS filesystem for this retained mount. Each routing node has one
 120 GB `/dev/sdb1` XFS filesystem mounted at `/pgdata`, not
 `/pgdata/pgroot`.
 
 ### 7.4 WAL archive and backup integration
 
-Each data node has a dedicated Ed25519 key. `archive_command` calls
-`/usr/local/sbin/archive-wal`, which:
+Rubrik owns UAT and Production base backups, archived WAL, retention and PITR
+media. PostgreSQL retains `wal_level=replica` for streaming replication;
+Rubrik supplies the durable `archive_mode` and `archive_command` configuration
+on both data candidates so protection can follow promotion.
 
-1. checks whether the final segment already exists;
-2. sends the segment as `<name>.partial` with rsync over SSH;
-3. atomically renames it on the monitor;
-4. optionally invokes the Rubrik RBS hook.
+The previous SSH/rsync archive to `/pgdata/WalArchive` is retained as the
+optional `monitor_ssh` provider only. Its active helper, timer and PostgreSQL
+include are absent in Rubrik-managed environments. Existing archive files and
+SSH keys are preserved for rollback and are not a second active backup path.
 
-An enabled systemd timer runs `/usr/local/sbin/force-wal-archive` every 60
-minutes on both data nodes. The helper exits on a standby and forces a WAL
-switch only on the current primary, so the schedule follows pg_auto_failover
-promotion without inventory changes. Completed WAL files are still archived
-immediately; the hourly switch bounds the age of a partially filled segment.
-
-The durable configuration chain is:
-
-```text
-postgresql.conf
-└── postgresql-ha.conf
-    └── postgresql-archive.conf
-```
-
-This prevents pg_autoctl from removing archive settings when it regenerates
-its base configuration. Required settings include `wal_level=replica`,
-`archive_mode=on`, and the archive helper command.
-
-WAL files alone are not a restorable backup. A tested base backup plus an
-unbroken WAL sequence and configuration recovery procedure are required for
-PITR.
-
-The approved target design is a daily, rate-limited PostgreSQL physical base
-backup initiated from the monitor/backup node against the dynamically detected
-primary. It uses plain-format `pg_basebackup`, streamed WAL, a SHA-256 backup
-manifest, `pg_verifybackup`, atomic publication, and Rubrik/off-host retention.
-Base backups should use a dedicated `/pgdata/BaseBackups` filesystem rather
-than competing with `/pgdata/WalArchive`. The implementation remains disabled
-until dedicated capacity, credentials, monitoring, retention, and an isolated
-restore test are approved. See `DB_BACKUP_AND_RECOVERY_RUNBOOK.md`, Section 5.4.
+`postgresql_wal_archive_provider` selects `rubrik`, `monitor_ssh`, or `none`.
+The `wal_archive_cleanup` role rejects a Rubrik cutover unless PostgreSQL has
+`archive_mode=on` and a nonempty command that does not reference the retired
+`archive-wal` helper. See `RUBRIK_WAL_CUTOVER_AND_DR_RUNBOOK.md`.
 
 ### 7.5 Network and firewall
 
@@ -656,7 +639,12 @@ sudo findmnt --verify --verbose
 - Recreate LVs/filesystems only under an approved rebuild record.
 - Never copy individual PostgreSQL data files between nodes.
 
-## 14. WAL archive recovery procedures
+## 14. Legacy monitor-WAL recovery procedures
+
+This section applies only during an approved rollback with
+`postgresql_wal_archive_provider=monitor_ssh`. For normal UAT/Production Rubrik
+backup incidents and database DR, follow
+`RUBRIK_WAL_CUTOVER_AND_DR_RUNBOOK.md` and the vendor-supported workflow.
 
 ### 14.1 Archive filesystem full
 
@@ -915,9 +903,9 @@ PGPASSWORD='<app password>' psql \
 | Healthy synchronous DB failover | intended near-zero committed-data loss | monitor detection, promotion, client reconnect |
 | Routing failover | no database data loss | VRRP detection and reconnect |
 | Standby rebuild | primary remains source | base-backup size and network throughput |
-| PITR | last continuous archived WAL available | base restore plus WAL replay |
-| Archive interruption | RPO worsens if WAL chain is lost | archive repair and backlog drain |
-| Site disaster | depends on off-site backup/WAL | infrastructure and full restore process |
+| PITR | latest valid Rubrik WAL/log recovery point | Rubrik restore plus operator-led HA reconstruction |
+| Rubrik interruption | RPO worsens while log protection is unavailable | repair Rubrik and verify a new recovery point |
+| Site disaster | depends on Rubrik DR copy and recovery point | infrastructure and full restore process |
 
 These are characteristics, not contractual objectives. Set formal RTO/RPO only
 after business approval and measured recovery exercises.
@@ -925,12 +913,12 @@ after business approval and measured recovery exercises.
 ## 23. Known limitations and required improvements
 
 - pg_auto_failover monitor is a single control-plane node.
-- WAL archive storage on the monitor is a single archive target.
+- Retained monitor archive storage is not an active second backup target.
 - Self-signed TLS encrypts traffic but does not provide enterprise CA identity
   assurance.
 - Keepalived VRRP PASS authentication is limited and is not encryption.
 - No automatic cross-site failover is implemented.
-- Rubrik hook is optional and must be paired with a tested restore runbook.
+- Rubrik HADR reconstruction remains operator-led and requires tested restores.
 - Production guard values must be replaced and validated before deployment;
   never work around the preflight assertions merely to make a playbook run.
 - Recovery automation should add explicit storage-disable controls, targeted
@@ -949,8 +937,11 @@ after business approval and measured recovery exercises.
 | PostgreSQL/monitor/service | `roles/pg_auto_failover` |
 | PgBouncer | `roles/pgbouncer` |
 | VIP and primary-aware routing | `roles/keepalived_haproxy` |
-| WAL archive/users/Rubrik hook | `roles/backup_wal` |
+| Database users | `roles/database_bootstrap` |
+| Optional legacy monitor WAL archive | `roles/backup_wal` |
+| Legacy WAL deactivation/provider validation | `roles/wal_archive_cleanup` |
 | Database backup and recovery | `DB_BACKUP_AND_RECOVERY_RUNBOOK.md` |
+| Rubrik cutover and DR | `RUBRIK_WAL_CUTOVER_AND_DR_RUNBOOK.md` |
 | Exporters/Logstash | `roles/monitoring_agents` |
 | Deployment procedure | `DEPLOYMENT_HOWTO.md` |
 | Code internals | `CODEBASE_ARCHITECTURE.md` |

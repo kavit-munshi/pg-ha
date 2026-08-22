@@ -25,6 +25,11 @@
             not (configure_logstash_forwarding | bool) or
             logstash_ip != "CHANGE_ME"
           - ntp_servers | length >= 1
+          - postgresql_wal_archive_provider in ['monitor_ssh', 'rubrik', 'none']
+          - >-
+            postgresql_wal_archive_provider != 'rubrik' or
+            rubrik_wal_cutover_confirmed | bool or
+            wal_archive_cleanup_force | bool
           - pg_auto_failover_monitor_password != "CHANGE_ME"
           - pg_auto_failover_replication_password != "CHANGE_ME"
           - app_db_password != "CHANGE_ME"
@@ -35,7 +40,10 @@
           Replace all required CHANGE_ME values (preferably with Ansible Vault),
           confirm the VIP/interface/NTP/client/monitoring inputs, and verify that
           every inventory ansible_host exactly matches its host_ips entry before
-          deployment.
+          deployment. For Rubrik, also confirm a successful base backup and
+          durable WAL configuration by setting rubrik_wal_cutover_confirmed=true.
+          Use wal_archive_cleanup_force=true only for an approved emergency
+          removal that intentionally bypasses Rubrik readiness validation.
 
 - name: Prepare operating systems, time synchronization, and storage
   hosts: all_nodes
@@ -66,14 +74,23 @@
   roles:
     - pg_auto_failover
 
-- name: Configure database users and WAL archiving
+- name: Configure database users and backup integration
   hosts: db_primary:db_standby:db_monitor
   serial: 1
   become: true
   roles:
+    - role: database_bootstrap
+      tags:
+        - database_bootstrap
     - role: backup_wal
+      when: postgresql_wal_archive_provider == 'monitor_ssh'
       tags:
         - backup_wal
+    - role: wal_archive_cleanup
+      when: postgresql_wal_archive_provider != 'monitor_ssh'
+      tags:
+        - backup_wal
+        - wal_archive_cleanup
 
 - name: Configure connection and routing tier
   hosts: routing_nodes

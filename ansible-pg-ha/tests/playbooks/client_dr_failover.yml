@@ -34,16 +34,12 @@
         msg:
           - "Exercise ID: {{ client_dr_test_id }}"
           - "Environment: {{ deployment_environment }}"
-          - "Scope: health, WAL archive, routing failover, controlled database switchover, restoration"
+          - "Backup provider: {{ postgresql_wal_archive_provider }}"
+          - "Scope: health, routing failover, controlled database switchover, restoration"
           - "This is not a destructive backup/PITR restore exercise."
 
 - name: Run baseline health validation
   ansible.builtin.import_playbook: health.yml
-
-- name: Prove WAL archive recoverability input
-  ansible.builtin.import_playbook: wal_archive.yml
-  vars:
-    confirm_wal_archive_test: true
 
 - name: Exercise and restore routing failover
   ansible.builtin.import_playbook: routing_failover.yml
@@ -70,5 +66,6 @@
       ansible.builtin.debug:
         msg:
           - "Exercise {{ client_dr_test_id }} completed successfully."
-          - "WAL, routing failover, database switchover, topology restoration, and final health passed."
+          - "Routing failover, database switchover, topology restoration, and final health passed."
+          - "Rubrik backup and PITR evidence must be attached separately to the acceptance record."
           - "Retain the wrapper evidence log with the client acceptance record."

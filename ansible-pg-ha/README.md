@@ -6,8 +6,9 @@ This repository deploys a five-node PostgreSQL 18 platform on Ubuntu 24.04:
 - two PgBouncer nodes behind a Keepalived VIP and HAProxy
 - XFS/LVM storage matching the per-role disk layout
 - node, PostgreSQL, and PgBouncer Prometheus exporters
-- SSH-based WAL shipping to the monitor/archive node
-- optional Logstash forwarding and Rubrik RBS hook
+- Rubrik-owned database and WAL protection in UAT and Production
+- an optional, default-off legacy SSH WAL archive provider for rollback
+- optional Logstash forwarding
 
 Documentation:
 
@@ -32,8 +33,11 @@ Documentation:
 - [PROD_DEPLOYMENT_PLAN.md](PROD_DEPLOYMENT_PLAN.md) — Production topology,
   required preflight decisions, deployment sequence, validation, and go/no-go
   checklist
-- [tests/README.md](tests/README.md) — comprehensive health, WAL archive,
-  routing failover, and PostgreSQL switchover test procedures
+- [tests/README.md](tests/README.md) — comprehensive provider-aware health,
+  routing failover, PostgreSQL switchover, and legacy rollback-WAL tests
+- [RUBRIK_WAL_CUTOVER_AND_DR_RUNBOOK.md](RUBRIK_WAL_CUTOVER_AND_DR_RUNBOOK.md)
+  — authoritative Rubrik cutover, legacy monitor-WAL removal, rollback, and
+  database DR procedures
 
 Environment-specific addresses are in `group_vars/uat.yml` and
 `group_vars/prod.yml`; common tunables and guarded secret defaults are in

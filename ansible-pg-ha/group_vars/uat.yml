@@ -1,6 +1,10 @@
 ---
 deployment_environment: uat
 storage_lvm_enabled: false
+# Rubrik is the sole archived-WAL and database-backup provider. The legacy
+# monitor SSH archive is removed but its SSH keys are retained for rollback.
+postgresql_wal_archive_provider: rubrik
+rubrik_wal_cutover_confirmed: false
 host_ips:
   BHC-QMSSQLU05: 192.168.129.105
   BHC-QMSSQLU06: 192.168.129.106

@@ -16,9 +16,13 @@
 
 The PostgreSQL 18 UAT environment has been deployed, configured, and tested.
 The database, routing, monitoring-agent, firewall, time-synchronization, storage,
-and WAL-archive checks have completed successfully. Controlled database and
+and HA checks have completed successfully. Controlled database and
 routing failover tests have also completed successfully, including restoration
 of the preferred topology.
+
+Rubrik is the UAT database and archived-WAL protection owner. Rubrik backup,
+recovery-point and isolated restore evidence is maintained separately from the
+Ansible HA test evidence.
 
 The environment is ready for client application connectivity, functional
 testing, operational familiarization, and UAT acceptance.
@@ -32,19 +36,21 @@ transferred using an approved secure channel.
 The handed-over environment includes:
 
 - two PostgreSQL 18 data nodes managed by pg_auto_failover;
-- one pg_auto_failover monitor and WAL archive node;
+- one pg_auto_failover monitor node;
 - two routing nodes running Keepalived, HAProxy, and PgBouncer;
 - a floating application database VIP;
 - LVM-backed XFS database storage;
 - Chrony time synchronization;
 - role-based UFW firewall enforcement;
 - Prometheus node, PostgreSQL, and PgBouncer exporters;
-- SSH-based WAL archiving to the monitor node;
+- Rubrik-managed database and WAL protection;
+- a disabled legacy monitor archive retained only for controlled rollback;
 - Ansible deployment, configuration, verification, and failover tests.
 
-The following external services are not delivered as active integrations:
+The following external services remain separately operated:
 
-- Rubrik Backup Service integration is prepared as a hook but is disabled;
+- Rubrik backup jobs, SLA policy, recovery points and restore testing are
+  operated and evidenced by the client backup team;
 - Logstash forwarding is disabled;
 - a central Prometheus server, dashboards, alert rules, and notification routes
   are not deployed by this repository;
@@ -60,7 +66,7 @@ flowchart LR
     R2["BHC-PGBSQLU04<br/>Keepalived backup<br/>HAProxy + PgBouncer"]
     DB1["BHC-QMSSQLU05<br/>Initial PostgreSQL primary"]
     DB2["BHC-QMSSQLU06<br/>Initial synchronous standby"]
-    MON["BHC-QMSSQLU07<br/>pg_auto_failover monitor<br/>WAL archive"]
+    MON["BHC-QMSSQLU07<br/>pg_auto_failover monitor<br/>retained legacy archive storage"]
     PROM["External Prometheus<br/>192.168.129.0/24"]
 
     APP -->|"TLS PostgreSQL :5432"| VIP
@@ -100,7 +106,7 @@ connect directly to an individual database server.
 |---|---:|---|---:|---:|---:|
 | `BHC-QMSSQLU05` | `192.168.129.105` | Initial PostgreSQL primary | 16 | 32 GB | 700 GB |
 | `BHC-QMSSQLU06` | `192.168.129.106` | Initial synchronous standby | 16 | 32 GB | 700 GB |
-| `BHC-QMSSQLU07` | `192.168.129.107` | Monitor and WAL archive | 8 | 16 GB | 1.1 TB |
+| `BHC-QMSSQLU07` | `192.168.129.107` | Monitor and retained legacy archive storage | 8 | 16 GB | 1.1 TB |
 | `BHC-PGBSQLU03` | `192.168.129.108` | Preferred routing/VIP node | 8 | 16 GB | 160 GB |
 | `BHC-PGBSQLU04` | `192.168.129.109` | Backup routing/VIP node | 8 | 16 GB | 160 GB |
 
@@ -199,7 +205,7 @@ PostgreSQL uses `/pgdata/pgroot/data` as PGDATA. It is a normal directory inside
 the `lv_data` filesystem, not a separate mount point. WAL is persistently bind
 mounted from `/pgdata/wal` to `/pgdata/pgroot/data/pg_wal`.
 
-### 7.2 Monitor/archive node U07
+### 7.2 Monitor node U07 and retained legacy archive storage
 
 U07 has the same `vg_pgdata` logical-volume layout and a separate 400 GB XFS
 archive filesystem mounted at:
@@ -217,32 +223,21 @@ database recovery procedure.
 
 ## 8. Backup and recovery position
 
-PostgreSQL WAL archiving is enabled on both data nodes:
+Rubrik is the sole UAT database and archived-WAL provider. PostgreSQL retains
+`wal_level=replica`; Rubrik owns `archive_mode`, `archive_command`, backup
+retention and PITR media. The legacy hourly timer, archive helper and archive
+include are absent.
 
-```text
-wal_level = replica
-archive_mode = on
-archive_command = '/usr/local/sbin/archive-wal "%p" "%f"'
-archive_timeout = 3600s
-```
-
-`postgresql-wal-archive-hourly.timer` is enabled on both data nodes. Its
-failover-aware helper forces a WAL switch every 60 minutes only on the current
-primary; completed segments continue to transfer immediately through
-`archive_command`.
-
-WAL files are transferred using source-restricted SSH keys to:
-
-```text
-BHC-QMSSQLU07:/pgdata/WalArchive
-```
+The old `/pgdata/WalArchive` filesystem and dedicated SSH keys remain in place
+for approved rollback only. They are not an active second backup path and are
+not deleted by Ansible cleanup.
 
 Important limitations:
 
-- WAL archiving alone is not a complete backup-and-restore solution;
-- the Rubrik RBS hook is installed as a placeholder but is disabled;
-- backup retention, full/base-backup scheduling, catalog protection, off-host
-  copies, restore testing, RPO, and RTO require client approval and ownership;
+- Ansible validates PostgreSQL provider configuration but cannot certify that a
+  Rubrik backup or restore completed;
+- backup retention, scheduling, catalog protection, off-host copies, restore
+  testing, RPO, and RTO require client approval and ownership;
 - VM backups must capture all database-related virtual disks consistently;
 - a VM backup must never be started alongside the original VM with the same
   hostname and IP address.
@@ -385,11 +380,11 @@ ansible db_cluster -i inventories/uat_hosts.ini -b -m shell \
   -a "df -Th /pgdata/pgroot /pgdata/wal /pgdata/log; findmnt /pgdata/pgroot/data/pg_wal"
 ```
 
-### WAL archive health
+### Backup health
 
-```bash
-bash tests/run_wal_archive_test.sh --ask-vault-pass
-```
+Run `bash tests/run_health.sh --ask-vault-pass`, then attach the latest Rubrik
+base-backup, WAL/log recovery-point and isolated restore/PITR evidence. Do not
+run the legacy monitor-WAL test while Rubrik is selected.
 
 ## 14. Change and maintenance controls
 
@@ -420,7 +415,7 @@ The implementation team reports the following tests passed on 5 August 2026:
 | Test | Result | Coverage |
 |---|---|---|
 | Comprehensive health | Passed | Services, NTP, UFW, mounts, exporters, VIP and SQL |
-| WAL archive integration | Passed | WAL switch and arrival on U07 archive filesystem |
+| Rubrik backup integration | Client evidence | Base backup, WAL/log recovery point and isolated restore/PITR |
 | Routing failover | Passed | VIP movement to U04, SQL continuity, preferred-owner restoration |
 | Database failover | Passed | Controlled promotion, VIP routing, controlled restoration |
 | Passwordless Ansible access | Passed | All five managed nodes |

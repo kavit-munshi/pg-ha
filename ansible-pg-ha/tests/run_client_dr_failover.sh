@@ -30,8 +30,8 @@ esac
 confirmation_phrase="${environment}-CLIENT-DR-FAILOVER"
 
 if [[ "${CONFIRM_CLIENT_DR_FAILOVER:-}" != "YES" ]]; then
-  echo "This exercise performs WAL activity, interrupts the active VIP router," >&2
-  echo "and performs two controlled PostgreSQL switchovers." >&2
+  echo "This exercise interrupts the active VIP router and performs two" >&2
+  echo "controlled PostgreSQL switchovers. Rubrik restore testing is separate." >&2
   read -r -p "Type ${confirmation_phrase} to continue: " confirmation
   if [[ "${confirmation}" != "${confirmation_phrase}" ]]; then
     echo "Cancelled."

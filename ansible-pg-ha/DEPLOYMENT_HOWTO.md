@@ -9,13 +9,20 @@ runbook for operators who may not be familiar with Ansible.
 The deployment creates:
 
 - a PostgreSQL primary and standby managed by `pg_auto_failover`;
-- a separate `pg_auto_failover` monitor and WAL archive host;
+- a separate `pg_auto_failover` monitor;
+- Rubrik-owned database and WAL protection in UAT and Production;
 - two PgBouncer, HAProxy, and Keepalived routing hosts;
 - a floating PostgreSQL virtual IP (VIP);
 - Chrony time synchronization;
 - role-based UFW firewall rules;
 - Prometheus node, PostgreSQL, and PgBouncer exporters;
-- SSH-based WAL archiving with an optional Rubrik hook.
+- provider-aware backup configuration with Rubrik as the UAT/Production owner.
+
+The retired monitor SSH archive remains available only when
+`postgresql_wal_archive_provider=monitor_ssh`. New deployments default to no
+archive provider, while UAT and Production explicitly select `rubrik`. Rubrik
+must be onboarded before the cleanup-tag deployment; see
+`RUBRIK_WAL_CUTOVER_AND_DR_RUNBOOK.md`.
 
 > **Destructive storage warning**
 >
@@ -38,7 +45,7 @@ The deployment creates:
 |---|---|---|---|
 | `BHC-QMSSQLU05` | `192.168.129.105` | Initial database primary | PostgreSQL 18, pg_auto_failover |
 | `BHC-QMSSQLU06` | `192.168.129.106` | Database standby | PostgreSQL 18, pg_auto_failover |
-| `BHC-QMSSQLU07` | `192.168.129.107` | Monitor and WAL archive | Monitor PostgreSQL, pg_auto_failover, archive |
+| `BHC-QMSSQLU07` | `192.168.129.107` | Monitor | Monitor PostgreSQL and pg_auto_failover |
 | `BHC-PGBSQLU03` | `192.168.129.108` | Routing node 1 | Keepalived MASTER, HAProxy, PgBouncer |
 | `BHC-PGBSQLU04` | `192.168.129.109` | Routing node 2 | Keepalived BACKUP, HAProxy, PgBouncer |
 
@@ -51,7 +58,7 @@ application CIDR `192.168.24.0/24`.
 |---|---|---|---|
 | `BHC-QMSSQLP01.bayshore.ca` | `192.168.128.134` | Initial database primary | PostgreSQL 18, pg_auto_failover |
 | `BHC-QMSSQLP02.bayshore.ca` | `192.168.128.135` | Database standby | PostgreSQL 18, pg_auto_failover |
-| `BHC-QMSSQLP03.bayshore.ca` | `192.168.128.136` | Monitor and WAL archive | Monitor PostgreSQL, pg_auto_failover, archive |
+| `BHC-QMSSQLP03.bayshore.ca` | `192.168.128.136` | Monitor | Monitor PostgreSQL and pg_auto_failover |
 | `BHC-PGBSQLP01.bayshore.ca` | `192.168.128.137` | Routing node 1 | Keepalived MASTER, HAProxy, PgBouncer |
 | `BHC-PGBSQLP02.bayshore.ca` | `192.168.128.138` | Routing node 2 | Keepalived BACKUP, HAProxy, PgBouncer |
 
@@ -630,37 +637,14 @@ curl -fsS http://<DB_NODE_IP>:9187/metrics | head
 curl -fsS http://<ROUTING_NODE_IP>:9127/metrics | head
 ```
 
-### 8.11 Check WAL archiving
+### 8.11 Check Rubrik backup ownership
 
-On the current primary:
-
-```bash
-sudo -u postgres psql -d postgres -c "SELECT pg_switch_wal();"
-sudo -u postgres psql -d postgres -c \
-  "SELECT archived_count, failed_count, last_archived_wal, last_failed_wal FROM pg_stat_archiver;"
-```
-
-On the selected environment monitor:
-
-```bash
-sudo -u postgres ls -lh /pgdata/WalArchive | tail
-```
-
-`failed_count` should not increase and a new WAL segment should appear.
-
-Verify the 60-minute automatic WAL switch timer on both database data nodes:
-
-```bash
-ansible db_primary:db_standby -i "$INVENTORY" -b -m command \
-  -a "systemctl is-active postgresql-wal-archive-hourly.timer"
-
-ansible db_primary:db_standby -i "$INVENTORY" -b -m command \
-  -a "systemctl list-timers postgresql-wal-archive-hourly.timer --no-pager"
-```
-
-The timer runs on both candidates but forces `pg_switch_wal()` only on the
-current primary. The resulting completed segment is delivered by the existing
-continuous `archive_command` transport to the selected environment monitor.
+Run the provider-aware health test and confirm both data nodes report
+`wal_level=replica`, `archive_mode=on`, and a non-legacy archive command or
+library. Confirm the old timer and `/usr/local/sbin/archive-wal` are absent.
+The backup operator must separately attach the latest successful Rubrik base
+backup, WAL/log recovery point and isolated restore/PITR evidence. Follow
+`RUBRIK_WAL_CUTOVER_AND_DR_RUNBOOK.md`.
 
 ### 8.12 Run the automated read-only health test
 
@@ -821,20 +805,13 @@ Exit status `0` means the router's paired database is primary. Check
 This is expected when `ufw_reset_rules: true`. Add the approved exception to
 the `ufw_firewall` role or its variables, review it, and rerun the playbook.
 
-### WAL archiving fails
+### Rubrik WAL/log protection fails
 
-From the current primary:
-
-```bash
-sudo -u postgres ssh \
-  -i /var/lib/postgresql/.ssh/id_ed25519_wal_archive \
-  postgres@<MONITOR_IP> "test -w /pgdata/WalArchive"
-
-sudo -u postgres psql -d postgres -c "SELECT * FROM pg_stat_archiver;"
-```
-
-Check SSH host keys, key authorization, selected-monitor archive ownership,
-disk space, and network access.
+Check `pg_stat_archiver`, `/pgdata/wal` capacity, the effective Rubrik archive
+command/library, RBS service and Rubrik job events. Escalate before WAL capacity
+becomes critical. Do not re-enable the monitor archive while Rubrik is active;
+use the approved rollback procedure in
+`RUBRIK_WAL_CUTOVER_AND_DR_RUNBOOK.md`.
 
 ## 11. Safe re-runs
 
