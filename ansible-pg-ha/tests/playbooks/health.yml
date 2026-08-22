@@ -203,7 +203,9 @@
       register: test_archive_mount
       changed_when: false
       failed_when: test_archive_mount.stdout | trim != 'xfs'
-      when: inventory_hostname in groups['db_monitor']
+      when:
+        - inventory_hostname in groups['db_monitor']
+        - postgresql_wal_archive_provider == 'monitor_ssh'
 
     - name: Check WAL archive settings on data nodes
       ansible.builtin.command:
@@ -218,24 +220,58 @@
           - >-
             SELECT current_setting('wal_level') || '|' ||
             current_setting('archive_mode') || '|' ||
-            current_setting('archive_command');
+            current_setting('archive_command') || '|' ||
+            current_setting('archive_library');
       become: true
       become_user: postgres
       register: test_archive_settings
       changed_when: false
-      failed_when: >-
-        not test_archive_settings.stdout.startswith('replica|on|') or
-        'archive-wal' not in test_archive_settings.stdout
       when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
 
-    - name: Inspect WAL transport and Rubrik hook files
+    - name: Validate configured WAL archive provider
+      ansible.builtin.assert:
+        that:
+          - test_archive_settings.stdout.split('|')[0] == 'replica'
+          - >-
+            postgresql_wal_archive_provider != 'monitor_ssh' or
+            (
+              test_archive_settings.stdout.split('|')[1] == 'on' and
+              'archive-wal' in test_archive_settings.stdout.split('|')[2]
+            )
+          - >-
+            postgresql_wal_archive_provider != 'rubrik' or
+            (
+              test_archive_settings.stdout.split('|')[1] == 'on' and
+              (
+                (
+                  test_archive_settings.stdout.split('|')[2] | length > 0 and
+                  test_archive_settings.stdout.split('|')[2] != '(disabled)'
+                ) or
+                test_archive_settings.stdout.split('|')[3] | length > 0
+              ) and
+              'archive-wal' not in test_archive_settings.stdout.split('|')[2]
+            )
+          - >-
+            postgresql_wal_archive_provider != 'rubrik' or
+            rubrik_archive_command_validation_pattern | length == 0 or
+            test_archive_settings.stdout.split('|')[2] is
+            search(rubrik_archive_command_validation_pattern)
+          - >-
+            postgresql_wal_archive_provider != 'none' or
+            test_archive_settings.stdout.split('|')[1] == 'off'
+        fail_msg: >-
+          Effective archive settings do not match provider
+          {{ postgresql_wal_archive_provider }}:
+          {{ test_archive_settings.stdout | trim }}
+      when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+
+    - name: Inspect legacy monitor WAL integration files
       ansible.builtin.stat:
         path: "{{ item }}"
       loop: >-
         {{
           [
             '/usr/local/sbin/archive-wal',
-            '/usr/local/sbin/rubrik-rbs-wal-hook',
             '/var/lib/postgresql/.ssh/id_ed25519_wal_archive'
           ] +
           (
@@ -245,7 +281,9 @@
           )
         }}
       register: test_wal_integration_files
-      when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+      when:
+        - inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+        - postgresql_wal_archive_provider == 'monitor_ssh'
 
     - name: Require protected executable WAL integration files
       ansible.builtin.assert:
@@ -257,8 +295,10 @@
           - >-
             item.item != '/var/lib/postgresql/.ssh/id_ed25519_wal_archive' or
             (item.stat.mode | default('')) == '0600'
-      loop: "{{ test_wal_integration_files.results }}"
-      when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+      loop: "{{ test_wal_integration_files.results | default([]) }}"
+      when:
+        - inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+        - postgresql_wal_archive_provider == 'monitor_ssh'
 
     - name: Check hourly WAL archive timer
       ansible.builtin.command:
@@ -271,7 +311,46 @@
       failed_when: test_wal_archive_timer.stdout | trim != 'active'
       when:
         - inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+        - postgresql_wal_archive_provider == 'monitor_ssh'
         - backup_wal_force_switch_enabled | bool
+
+    - name: Inspect legacy active WAL integration artifacts
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /usr/local/sbin/archive-wal
+        - /usr/local/sbin/force-wal-archive
+        - /usr/local/sbin/rubrik-rbs-wal-hook
+        - /etc/systemd/system/postgresql-wal-archive-hourly.service
+        - /etc/systemd/system/postgresql-wal-archive-hourly.timer
+        - "{{ pgdata_path }}/postgresql-archive.conf"
+      register: test_legacy_wal_artifacts
+      when:
+        - inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+        - postgresql_wal_archive_provider != 'monitor_ssh'
+
+    - name: Require legacy active WAL integration artifacts to be absent
+      ansible.builtin.assert:
+        that:
+          - not item.stat.exists
+        fail_msg: "Legacy WAL artifact remains active: {{ item.item }}"
+      loop: "{{ test_legacy_wal_artifacts.results | default([]) }}"
+      when:
+        - inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+        - postgresql_wal_archive_provider != 'monitor_ssh'
+
+    - name: Check legacy hourly WAL timer is inactive
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - is-active
+          - postgresql-wal-archive-hourly.timer
+      register: test_legacy_wal_timer_state
+      changed_when: false
+      failed_when: test_legacy_wal_timer_state.stdout | trim == 'active'
+      when:
+        - inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+        - postgresql_wal_archive_provider != 'monitor_ssh'
 
     - name: Require exactly one writable data node
       ansible.builtin.assert:

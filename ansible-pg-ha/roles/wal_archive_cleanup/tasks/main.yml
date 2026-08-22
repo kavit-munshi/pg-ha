@@ -1,0 +1,175 @@
+---
+- name: Validate WAL archive provider selection
+  ansible.builtin.assert:
+    that:
+      - postgresql_wal_archive_provider in ['rubrik', 'none']
+    fail_msg: >-
+      wal_archive_cleanup is only valid for the rubrik or none providers.
+
+- name: Require explicit Rubrik cutover authorization
+  ansible.builtin.assert:
+    that:
+      - >-
+        rubrik_wal_cutover_confirmed | bool or
+        wal_archive_cleanup_force | bool
+    fail_msg: >-
+      Rubrik cleanup is locked. Confirm a successful Rubrik base backup and
+      durable WAL configuration on both data candidates, then set
+      rubrik_wal_cutover_confirmed=true for the approved cutover. For an
+      explicitly accepted unprotected transition, use
+      wal_archive_cleanup_force=true.
+  when: postgresql_wal_archive_provider == 'rubrik'
+
+- name: Warn about forced WAL archive cleanup
+  ansible.builtin.debug:
+    msg:
+      - WARNING - forced legacy WAL cleanup is enabled.
+      - Rubrik readiness and effective archive-command validation are bypassed.
+      - This operation does not prove that a usable database or WAL backup exists.
+      - Monitor /pgdata/wal capacity and establish the intended backup provider immediately.
+  when: wal_archive_cleanup_force | bool
+
+- name: Inspect legacy hourly WAL archive timer
+  ansible.builtin.stat:
+    path: /etc/systemd/system/postgresql-wal-archive-hourly.timer
+  register: wal_archive_cleanup_timer_unit
+  when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+
+- name: Stop and disable legacy hourly WAL archive timer
+  ansible.builtin.systemd:
+    name: postgresql-wal-archive-hourly.timer
+    enabled: false
+    state: stopped
+  when:
+    - inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+    - wal_archive_cleanup_timer_unit.stat.exists
+
+- name: Remove legacy monitor WAL archive include
+  ansible.builtin.lineinfile:
+    path: "{{ pgdata_path }}/postgresql-ha.conf"
+    regexp: >-
+      ^\s*include_if_exists\s*=\s*['\"]postgresql-archive\.conf['\"]\s*$
+    state: absent
+  notify: Restart pg_autoctl after legacy WAL cleanup
+  when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+
+- name: Remove legacy monitor WAL archive configuration
+  ansible.builtin.file:
+    path: "{{ pgdata_path }}/postgresql-archive.conf"
+    state: absent
+  notify: Restart pg_autoctl after legacy WAL cleanup
+  when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+
+- name: Remove legacy monitor WAL executables and systemd units
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /usr/local/sbin/archive-wal
+    - /usr/local/sbin/force-wal-archive
+    - /usr/local/sbin/rubrik-rbs-wal-hook
+    - /etc/systemd/system/postgresql-wal-archive-hourly.service
+    - /etc/systemd/system/postgresql-wal-archive-hourly.timer
+  notify: Reload systemd after legacy WAL cleanup
+  when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+
+- name: Apply legacy monitor WAL cleanup
+  ansible.builtin.meta: flush_handlers
+
+- name: Wait for PostgreSQL after legacy WAL cleanup
+  ansible.builtin.command:
+    argv:
+      - "/usr/lib/postgresql/{{ postgresql_version }}/bin/pg_isready"
+      - -h
+      - /var/run/postgresql
+      - -p
+      - "{{ postgresql_port | string }}"
+  become: true
+  become_user: postgres
+  register: wal_archive_cleanup_postgresql_ready
+  changed_when: false
+  until: wal_archive_cleanup_postgresql_ready.rc == 0
+  retries: 60
+  delay: 2
+  when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+
+- name: Read effective PostgreSQL archive configuration
+  ansible.builtin.command:
+    argv:
+      - "/usr/lib/postgresql/{{ postgresql_version }}/bin/psql"
+      - --no-psqlrc
+      - --tuples-only
+      - --no-align
+      - --dbname
+      - postgres
+      - --command
+      - >-
+        SELECT current_setting('wal_level') || '|' ||
+        current_setting('archive_mode') || '|' ||
+        current_setting('archive_command') || '|' ||
+        current_setting('archive_library');
+  become: true
+  become_user: postgres
+  register: wal_archive_cleanup_effective_settings
+  changed_when: false
+  when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+
+- name: Require Rubrik to own active WAL archiving
+  ansible.builtin.assert:
+    that:
+      - wal_archive_cleanup_effective_settings.stdout.split('|')[0] == 'replica'
+      - wal_archive_cleanup_effective_settings.stdout.split('|')[1] == 'on'
+      - >-
+        (
+          wal_archive_cleanup_effective_settings.stdout.split('|')[2] | length > 0 and
+          wal_archive_cleanup_effective_settings.stdout.split('|')[2] != '(disabled)'
+        ) or
+        wal_archive_cleanup_effective_settings.stdout.split('|')[3] | length > 0
+      - "'archive-wal' not in wal_archive_cleanup_effective_settings.stdout"
+      - >-
+        rubrik_archive_command_validation_pattern | length == 0 or
+        wal_archive_cleanup_effective_settings.stdout.split('|')[2] is
+        search(rubrik_archive_command_validation_pattern)
+    fail_msg: >-
+      Rubrik is selected but PostgreSQL does not have an active non-legacy
+      archive command. Complete the Rubrik WAL configuration before removing
+      the monitor archive. Effective settings:
+      {{ wal_archive_cleanup_effective_settings.stdout | trim }}
+  when:
+    - inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+    - postgresql_wal_archive_provider == 'rubrik'
+    - not (wal_archive_cleanup_force | bool)
+
+- name: Require archived WAL to be disabled when no provider is selected
+  ansible.builtin.assert:
+    that:
+      - wal_archive_cleanup_effective_settings.stdout.split('|')[0] == 'replica'
+      - wal_archive_cleanup_effective_settings.stdout.split('|')[1] == 'off'
+      - "'archive-wal' not in wal_archive_cleanup_effective_settings.stdout"
+    fail_msg: >-
+      No WAL archive provider is selected, but archived-WAL settings remain
+      active. Effective settings:
+      {{ wal_archive_cleanup_effective_settings.stdout | trim }}
+  when:
+    - inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+    - postgresql_wal_archive_provider == 'none'
+    - not (wal_archive_cleanup_force | bool)
+
+- name: Report effective archive state after forced cleanup
+  ansible.builtin.debug:
+    msg: >-
+      Forced cleanup completed without provider validation. Effective settings:
+      {{ wal_archive_cleanup_effective_settings.stdout | trim }}. Standard
+      health tests may fail until Rubrik is active or the provider is changed
+      to none with archive_mode disabled.
+  when:
+    - inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+    - wal_archive_cleanup_force | bool
+
+- name: Confirm retained WAL SSH key state is not managed by cleanup
+  ansible.builtin.debug:
+    msg: >-
+      Legacy WAL SSH keys, monitor authorized_keys entries, the dedicated SSH
+      group and SSH policy are intentionally retained for rollback. The archive
+      filesystem and its existing files are also preserved.
+  when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])

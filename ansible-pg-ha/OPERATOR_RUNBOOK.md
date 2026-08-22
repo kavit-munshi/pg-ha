@@ -8,12 +8,12 @@ The playbooks provision the following hardened Ubuntu 24.04 hosts:
 |---|---|---|---|
 | UAT | `BHC-QMSSQLU05` | `192.168.129.105` | Initial PostgreSQL primary |
 | UAT | `BHC-QMSSQLU06` | `192.168.129.106` | Synchronous standby |
-| UAT | `BHC-QMSSQLU07` | `192.168.129.107` | pg_auto_failover monitor and WAL archive |
+| UAT | `BHC-QMSSQLU07` | `192.168.129.107` | pg_auto_failover monitor |
 | UAT | `BHC-PGBSQLU03` | `192.168.129.108` | Initial VIP MASTER, HAProxy, PgBouncer |
 | UAT | `BHC-PGBSQLU04` | `192.168.129.109` | Initial VIP BACKUP, HAProxy, PgBouncer |
 | Production | `BHC-QMSSQLP01.bayshore.ca` | `192.168.128.134` | Initial PostgreSQL primary |
 | Production | `BHC-QMSSQLP02.bayshore.ca` | `192.168.128.135` | Synchronous standby |
-| Production | `BHC-QMSSQLP03.bayshore.ca` | `192.168.128.136` | pg_auto_failover monitor and WAL archive |
+| Production | `BHC-QMSSQLP03.bayshore.ca` | `192.168.128.136` | pg_auto_failover monitor |
 | Production | `BHC-PGBSQLP01.bayshore.ca` | `192.168.128.137` | Initial VIP MASTER, HAProxy, PgBouncer |
 | Production | `BHC-PGBSQLP02.bayshore.ca` | `192.168.128.138` | Initial VIP BACKUP, HAProxy, PgBouncer |
 
@@ -32,10 +32,11 @@ backend only when `SELECT pg_is_in_recovery()` returns `false`. After a
 pg_auto_failover promotion, HAProxy therefore selects the PgBouncer paired with
 the new primary.
 
-WAL is archived from both database candidates with `archive_command` and a
-dedicated Ed25519 key. The archive script sends each completed segment to
-the selected environment's monitor under `/pgdata/WalArchive` using an atomic
-`.partial` rename.
+Rubrik is the sole database and archived-WAL protection owner in UAT and
+Production. The former SSH/rsync archive to the monitor is disabled and kept as
+an explicit rollback provider. Its keys and existing `/pgdata/WalArchive`
+contents are retained. Use `RUBRIK_WAL_CUTOVER_AND_DR_RUNBOOK.md` for backup
+validation, cutover, rollback and database recovery.
 
 ## 2. Safety and prerequisites
 
@@ -387,26 +388,11 @@ sudo -u postgres psql -d postgres -c \
 
 Verify the automatic 60-minute WAL switch timer on both data nodes:
 
-```bash
-systemctl status postgresql-wal-archive-hourly.timer --no-pager
-systemctl list-timers postgresql-wal-archive-hourly.timer --no-pager
-journalctl -u postgresql-wal-archive-hourly.service -n 20 --no-pager
-```
-
-The timer is installed on both data nodes so it follows a failover. Its script
-exits successfully on a standby and calls `pg_switch_wal()` only on the current
-primary. PostgreSQL continues to archive completed segments immediately; the
-hourly schedule limits how long a partially filled segment remains open.
-
-On the selected environment monitor:
-
-```bash
-sudo -u postgres ls -lh /pgdata/WalArchive | tail
-```
-
-The included Rubrik hook is inert by default. After installing and validating
-the RBS agent, set `rubrik_rbs_enabled: true`, set
-`rubrik_rbs_hook_command`, and re-run `site.yml`.
+For UAT and Production, confirm `postgresql-wal-archive-hourly.timer` is not
+active and `/usr/local/sbin/archive-wal` is absent. Verify the latest successful
+base backup, WAL/log recovery point and SLA compliance in Rubrik. The retained
+`/pgdata/WalArchive` contents and SSH keys are rollback assets, not an active
+backup path. See `RUBRIK_WAL_CUTOVER_AND_DR_RUNBOOK.md`.
 
 Run the automated read-only health test with the selected inventory. Test
 wrappers default to UAT when `INVENTORY` is absent, so Production operators
@@ -473,15 +459,8 @@ sudo -u haproxy env HAPROXY_SERVER_ADDR=<router-ip> \
   /usr/local/sbin/check-pg-primary
 ```
 
-If WAL archiving fails, test the exact service-account path from the current
-primary:
-
-```bash
-sudo -u postgres ssh -i /var/lib/postgresql/.ssh/id_ed25519_wal_archive \
-  postgres@<monitor-ip> 'test -w /pgdata/WalArchive'
-sudo -u postgres psql -d postgres -c \
-  "SELECT * FROM pg_stat_archiver;"
-```
-
-Correct the underlying network, permission, certificate, or secret issue and
-re-run `site.yml`; avoid deleting LVM volumes, PGDATA, or pg_autoctl state.
+If Rubrik WAL/log protection fails, inspect `pg_stat_archiver`, the effective
+archive command/library, RBS service/events and `/pgdata/wal` capacity. Do not
+test or reactivate the retained monitor SSH path unless the approved rollback
+procedure has first paused Rubrik ownership. Avoid deleting LVM volumes,
+PGDATA, pg_autoctl state, retained keys, or archive files.

@@ -1,0 +1,1063 @@
+{
+  "schema": "openai.presentation.layout/v4",
+  "unit": "px",
+  "slide": {
+    "aid": "sl/4tiy55",
+    "id": "4tiy55",
+    "slide": 2,
+    "layoutId": "fb41ebc0-713f-44f2-bc69-ba8ee9b98559",
+    "layoutName": "Title Slide",
+    "layoutType": "title",
+    "masterLayoutId": "3651ef42-df59-4910-9b4c-34e65f32bc85",
+    "masterLayoutName": "Master",
+    "backgroundColor": "#FFFFFF",
+    "frame": {
+      "left": 0,
+      "top": 0,
+      "width": 1280,
+      "height": 720
+    }
+  },
+  "theme": {
+    "colorSchemeName": "ChatGPT",
+    "colors": {
+      "accent1": "#156082",
+      "accent2": "#E97132",
+      "accent3": "#196B24",
+      "accent4": "#0F9ED5",
+      "accent5": "#A02B93",
+      "accent6": "#4EA72E",
+      "bg1": "#FFFFFF",
+      "bg2": "#000000",
+      "tx1": "#1F1F1F",
+      "tx2": "#FFFFFF",
+      "dk1": "#000000",
+      "lt1": "#FFFFFF",
+      "dk2": "#0E2841",
+      "lt2": "#E8E8E8",
+      "hlink": "#467886",
+      "folHlink": "#96607D"
+    },
+    "typefaces": [
+      "Arial"
+    ]
+  },
+  "inheritedLayers": [
+    {
+      "scope": "layout",
+      "id": "fb41ebc0-713f-44f2-bc69-ba8ee9b98559",
+      "name": "Title Slide",
+      "type": "title",
+      "parentLayoutId": "3651ef42-df59-4910-9b4c-34e65f32bc85",
+      "elements": []
+    },
+    {
+      "scope": "master",
+      "id": "3651ef42-df59-4910-9b4c-34e65f32bc85",
+      "name": "Master",
+      "type": "master",
+      "elements": []
+    }
+  ],
+  "elements": [
+    {
+      "order": 1,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/iloby1wv",
+      "id": "1",
+      "name": "title-2",
+      "bbox": [
+        56,
+        38,
+        1130,
+        78
+      ],
+      "geometry": "rect",
+      "text": "Three operating models; one proof standard",
+      "textPreview": "Three operating models; one proof standard",
+      "resolvedFontSize": 38,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 38,
+        "typeface": "Arial",
+        "color": "#0B1320",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Three operating models; one proof standard"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Three operating models; one proof standard",
+          "resolvedTextStyle": {
+            "fontSize": 38,
+            "typeface": "Arial",
+            "color": "#0B1320",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Three operating models; one proof standard",
+              "fontSize": 38,
+              "typeface": "Arial",
+              "color": "#0B1320",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 2,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/58futwvm",
+      "id": "2",
+      "name": "title-rule-2",
+      "bbox": [
+        56,
+        122,
+        1168,
+        2
+      ],
+      "geometry": "rect",
+      "fillColor": "#0B1320",
+      "lineWidth": 0
+    },
+    {
+      "order": 3,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/476t0be1",
+      "id": "3",
+      "name": "page-2",
+      "bbox": [
+        1180,
+        666,
+        44,
+        22
+      ],
+      "geometry": "rect",
+      "text": "02",
+      "textPreview": "02",
+      "resolvedFontSize": 13,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 13,
+        "typeface": "Arial",
+        "color": "#596273",
+        "alignment": "right",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "02"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "02",
+          "resolvedTextStyle": {
+            "fontSize": 13,
+            "typeface": "Arial",
+            "color": "#596273",
+            "alignment": "right"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "02",
+              "fontSize": 13,
+              "typeface": "Arial",
+              "color": "#596273",
+              "alignment": "right"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 4,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/vixcnmx4",
+      "id": "4",
+      "name": "s2-lead",
+      "bbox": [
+        56,
+        150,
+        1120,
+        46
+      ],
+      "geometry": "rect",
+      "text": "The decision is about ownership and orchestration—not whether base backups and WAL are required.",
+      "textPreview": "The decision is about ownership and orchestration—not whether base backups and WAL are required.",
+      "resolvedFontSize": 21,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 21,
+        "typeface": "Arial",
+        "color": "#596273",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "The decision is about ownership and orchestration—not whether base backups and WAL are required."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "The decision is about ownership and orchestration—not whether base backups and WAL are required.",
+          "resolvedTextStyle": {
+            "fontSize": 21,
+            "typeface": "Arial",
+            "color": "#596273",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "The decision is about ownership and orchestration—not whether base backups and WAL are required.",
+              "fontSize": 21,
+              "typeface": "Arial",
+              "color": "#596273",
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 5,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/uh4buhwz",
+      "id": "5",
+      "name": "option-1-top",
+      "bbox": [
+        56,
+        200,
+        8,
+        310
+      ],
+      "geometry": "rect",
+      "fillColor": "#3D8DFF",
+      "lineWidth": 0
+    },
+    {
+      "order": 6,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/hkfupwva",
+      "id": "6",
+      "name": "option-1-number",
+      "bbox": [
+        82,
+        198,
+        70,
+        55
+      ],
+      "geometry": "rect",
+      "text": "01",
+      "textPreview": "01",
+      "resolvedFontSize": 32,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 32,
+        "typeface": "Arial",
+        "color": "#3D8DFF",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "01"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "01",
+          "resolvedTextStyle": {
+            "fontSize": 32,
+            "typeface": "Arial",
+            "color": "#3D8DFF",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "01",
+              "fontSize": 32,
+              "typeface": "Arial",
+              "color": "#3D8DFF",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 7,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/wj6twrep",
+      "id": "7",
+      "name": "option-1-heading",
+      "bbox": [
+        82,
+        254,
+        320,
+        96
+      ],
+      "geometry": "rect",
+      "text": "Rubrik with native HA integration",
+      "textPreview": "Rubrik with native HA integration",
+      "resolvedFontSize": 25,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 25,
+        "typeface": "Arial",
+        "color": "#0B1320",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Rubrik with native HA"
+          },
+          {
+            "index": 2,
+            "text": "integration"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Rubrik with native HA integration",
+          "resolvedTextStyle": {
+            "fontSize": 25,
+            "typeface": "Arial",
+            "color": "#0B1320",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Rubrik with native HA integration",
+              "fontSize": 25,
+              "typeface": "Arial",
+              "color": "#0B1320",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 8,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/7edsjmx8",
+      "id": "8",
+      "name": "option-1-body",
+      "bbox": [
+        82,
+        364,
+        320,
+        170
+      ],
+      "geometry": "rect",
+      "text": "Potentially product-led end to end. Conditional on PostgreSQL 18 and pg_auto_failover support being confirmed and proven.",
+      "textPreview": "Potentially product-led end to end. Conditional on PostgreSQL 18 and pg_auto_failover support being confirmed and proven.",
+      "resolvedFontSize": 18,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 18,
+        "typeface": "Arial",
+        "color": "#596273",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 4,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Potentially product-led end to end."
+          },
+          {
+            "index": 2,
+            "text": "Conditional on PostgreSQL 18 and"
+          },
+          {
+            "index": 3,
+            "text": "pg_auto_failover support being"
+          },
+          {
+            "index": 4,
+            "text": "confirmed and proven."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Potentially product-led end to end. Conditional on PostgreSQL 18 and pg_auto_failover support being confirmed and proven.",
+          "resolvedTextStyle": {
+            "fontSize": 18,
+            "typeface": "Arial",
+            "color": "#596273",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Potentially product-led end to end. Conditional on PostgreSQL 18 and pg_auto_failover support being confirmed and proven.",
+              "fontSize": 18,
+              "typeface": "Arial",
+              "color": "#596273",
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 9,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/md4bqhwn",
+      "id": "9",
+      "name": "option-2-top",
+      "bbox": [
+        450,
+        200,
+        8,
+        310
+      ],
+      "geometry": "rect",
+      "fillColor": "#6DCBF4",
+      "lineWidth": 0
+    },
+    {
+      "order": 10,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/4vmlkryd",
+      "id": "10",
+      "name": "option-2-number",
+      "bbox": [
+        476,
+        198,
+        70,
+        55
+      ],
+      "geometry": "rect",
+      "text": "02",
+      "textPreview": "02",
+      "resolvedFontSize": 32,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 32,
+        "typeface": "Arial",
+        "color": "#6DCBF4",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "02"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "02",
+          "resolvedTextStyle": {
+            "fontSize": 32,
+            "typeface": "Arial",
+            "color": "#6DCBF4",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "02",
+              "fontSize": 32,
+              "typeface": "Arial",
+              "color": "#6DCBF4",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 11,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/pwv2twfy",
+      "id": "11",
+      "name": "option-2-heading",
+      "bbox": [
+        476,
+        254,
+        320,
+        96
+      ],
+      "geometry": "rect",
+      "text": "Rubrik without native HA integration",
+      "textPreview": "Rubrik without native HA integration",
+      "resolvedFontSize": 25,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 25,
+        "typeface": "Arial",
+        "color": "#0B1320",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Rubrik without native HA"
+          },
+          {
+            "index": 2,
+            "text": "integration"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Rubrik without native HA integration",
+          "resolvedTextStyle": {
+            "fontSize": 25,
+            "typeface": "Arial",
+            "color": "#0B1320",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Rubrik without native HA integration",
+              "fontSize": 25,
+              "typeface": "Arial",
+              "color": "#0B1320",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 12,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/2t43ihg7",
+      "id": "12",
+      "name": "option-2-body",
+      "bbox": [
+        476,
+        364,
+        320,
+        170
+      ],
+      "geometry": "rect",
+      "text": "Central protection with explicit DBA orchestration for primary changes, monitor recovery, fencing, and cluster rejoin.",
+      "textPreview": "Central protection with explicit DBA orchestration for primary changes, monitor recovery, fencing, and cluster rejoin.",
+      "resolvedFontSize": 18,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 18,
+        "typeface": "Arial",
+        "color": "#596273",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 4,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Central protection with explicit DBA"
+          },
+          {
+            "index": 2,
+            "text": "orchestration for primary changes,"
+          },
+          {
+            "index": 3,
+            "text": "monitor recovery, fencing, and cluster"
+          },
+          {
+            "index": 4,
+            "text": "rejoin."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Central protection with explicit DBA orchestration for primary changes, monitor recovery, fencing, and cluster rejoin.",
+          "resolvedTextStyle": {
+            "fontSize": 18,
+            "typeface": "Arial",
+            "color": "#596273",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Central protection with explicit DBA orchestration for primary changes, monitor recovery, fencing, and cluster rejoin.",
+              "fontSize": 18,
+              "typeface": "Arial",
+              "color": "#596273",
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 13,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/3udkrmxs",
+      "id": "13",
+      "name": "option-3-top",
+      "bbox": [
+        844,
+        200,
+        8,
+        310
+      ],
+      "geometry": "rect",
+      "fillColor": "#F5B942",
+      "lineWidth": 0
+    },
+    {
+      "order": 14,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/gr21gry1",
+      "id": "14",
+      "name": "option-3-number",
+      "bbox": [
+        870,
+        198,
+        70,
+        55
+      ],
+      "geometry": "rect",
+      "text": "03",
+      "textPreview": "03",
+      "resolvedFontSize": 32,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 32,
+        "typeface": "Arial",
+        "color": "#F5B942",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "03"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "03",
+          "resolvedTextStyle": {
+            "fontSize": 32,
+            "typeface": "Arial",
+            "color": "#F5B942",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "03",
+              "fontSize": 32,
+              "typeface": "Arial",
+              "color": "#F5B942",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 15,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/hsv2pcfm",
+      "id": "15",
+      "name": "option-3-heading",
+      "bbox": [
+        870,
+        254,
+        320,
+        96
+      ],
+      "geometry": "rect",
+      "text": "Ansible WAL plus manual base backup",
+      "textPreview": "Ansible WAL plus manual base backup",
+      "resolvedFontSize": 25,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 25,
+        "typeface": "Arial",
+        "color": "#0B1320",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Ansible WAL plus"
+          },
+          {
+            "index": 2,
+            "text": "manual base backup"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Ansible WAL plus manual base backup",
+          "resolvedTextStyle": {
+            "fontSize": 25,
+            "typeface": "Arial",
+            "color": "#0B1320",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Ansible WAL plus manual base backup",
+              "fontSize": 25,
+              "typeface": "Arial",
+              "color": "#0B1320",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 16,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/upkjehgv",
+      "id": "16",
+      "name": "option-3-body",
+      "bbox": [
+        870,
+        364,
+        320,
+        170
+      ],
+      "geometry": "rect",
+      "text": "Maximum control and transparency, with the largest internal engineering, operations, and assurance burden.",
+      "textPreview": "Maximum control and transparency, with the largest internal engineering, operations, and assurance burden.",
+      "resolvedFontSize": 18,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 18,
+        "typeface": "Arial",
+        "color": "#596273",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 3,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Maximum control and transparency,"
+          },
+          {
+            "index": 2,
+            "text": "with the largest internal engineering,"
+          },
+          {
+            "index": 3,
+            "text": "operations, and assurance burden."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Maximum control and transparency, with the largest internal engineering, operations, and assurance burden.",
+          "resolvedTextStyle": {
+            "fontSize": 18,
+            "typeface": "Arial",
+            "color": "#596273",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Maximum control and transparency, with the largest internal engineering, operations, and assurance burden.",
+              "fontSize": 18,
+              "typeface": "Arial",
+              "color": "#596273",
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 17,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/fqtknmxg",
+      "id": "17",
+      "name": "s2-bottom",
+      "bbox": [
+        56,
+        576,
+        1168,
+        62
+      ],
+      "geometry": "rect",
+      "fillColor": "#0B1320",
+      "lineWidth": 0
+    },
+    {
+      "order": 18,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/0n6lsbyl",
+      "id": "18",
+      "name": "s2-bottom-text",
+      "bbox": [
+        80,
+        590,
+        1120,
+        36
+      ],
+      "geometry": "rect",
+      "text": "No option is accepted until an isolated restore proves the recovery chain and measures RPO/RTO.",
+      "textPreview": "No option is accepted until an isolated restore proves the recovery chain and measures RPO/RTO.",
+      "resolvedFontSize": 21,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 21,
+        "typeface": "Arial",
+        "color": "#FFFFFF",
+        "bold": true,
+        "alignment": "center",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "No option is accepted until an isolated restore proves the recovery chain and measures RPO/RTO."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "No option is accepted until an isolated restore proves the recovery chain and measures RPO/RTO.",
+          "resolvedTextStyle": {
+            "fontSize": 21,
+            "typeface": "Arial",
+            "color": "#FFFFFF",
+            "bold": true,
+            "alignment": "center"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "No option is accepted until an isolated restore proves the recovery chain and measures RPO/RTO.",
+              "fontSize": 21,
+              "typeface": "Arial",
+              "color": "#FFFFFF",
+              "bold": true,
+              "alignment": "center"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    }
+  ],
+  "composeRuns": []
+}

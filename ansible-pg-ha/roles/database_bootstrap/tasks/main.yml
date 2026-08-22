@@ -1,0 +1,107 @@
+---
+- name: Wait for writable primary database
+  ansible.builtin.command:
+    argv:
+      - "/usr/lib/postgresql/{{ postgresql_version }}/bin/pg_isready"
+      - -h
+      - "127.0.0.1"
+      - -p
+      - "{{ postgresql_port | string }}"
+      - -d
+      - postgres
+  become: true
+  become_user: postgres
+  register: database_bootstrap_writable_db_ready
+  until: database_bootstrap_writable_db_ready.rc == 0
+  retries: 30
+  delay: 2
+  changed_when: false
+  when: inventory_hostname in groups['db_primary']
+
+- name: Create application login on initial primary
+  community.postgresql.postgresql_user:
+    name: "{{ app_db_user }}"
+    password: "{{ app_db_password }}"
+    login_db: postgres
+    login_unix_socket: /var/run/postgresql
+    role_attr_flags: LOGIN
+    state: present
+  become: true
+  become_user: postgres
+  no_log: true
+  when: inventory_hostname in groups['db_primary']
+
+- name: Create application database owned by application login
+  community.postgresql.postgresql_db:
+    name: "{{ app_database }}"
+    owner: "{{ app_db_user }}"
+    login_unix_socket: /var/run/postgresql
+    state: present
+  become: true
+  become_user: postgres
+  when: inventory_hostname in groups['db_primary']
+
+- name: Create HAProxy health-check login on initial primary
+  community.postgresql.postgresql_user:
+    name: "{{ haproxy_health_user }}"
+    password: "{{ haproxy_health_password }}"
+    login_db: postgres
+    login_unix_socket: /var/run/postgresql
+    role_attr_flags: LOGIN
+    state: present
+  become: true
+  become_user: postgres
+  no_log: true
+  when: inventory_hostname in groups['db_primary']
+
+- name: Create PostgreSQL exporter login on initial primary
+  community.postgresql.postgresql_user:
+    name: "{{ postgres_exporter_user }}"
+    password: "{{ postgres_exporter_password }}"
+    login_db: postgres
+    login_unix_socket: /var/run/postgresql
+    role_attr_flags: LOGIN
+    state: present
+  become: true
+  become_user: postgres
+  no_log: true
+  when: inventory_hostname in groups['db_primary']
+
+- name: Grant pg_monitor to exporter
+  community.postgresql.postgresql_membership:
+    groups:
+      - pg_monitor
+    target_roles:
+      - "{{ postgres_exporter_user }}"
+    login_db: postgres
+    login_unix_socket: /var/run/postgresql
+    state: present
+  become: true
+  become_user: postgres
+  when: inventory_hostname in groups['db_primary']
+
+- name: Create exporter login on monitor database
+  community.postgresql.postgresql_user:
+    name: "{{ postgres_exporter_user }}"
+    password: "{{ postgres_exporter_password }}"
+    login_db: postgres
+    login_unix_socket: /var/run/postgresql
+    role_attr_flags: LOGIN
+    state: present
+  become: true
+  become_user: postgres
+  no_log: true
+  when: inventory_hostname in groups['db_monitor']
+
+- name: Grant pg_monitor to monitor exporter
+  community.postgresql.postgresql_membership:
+    groups:
+      - pg_monitor
+    target_roles:
+      - "{{ postgres_exporter_user }}"
+    login_db: postgres
+    login_unix_socket: /var/run/postgresql
+    state: present
+  become: true
+  become_user: postgres
+  when: inventory_hostname in groups['db_monitor']

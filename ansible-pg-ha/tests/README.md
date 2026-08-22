@@ -41,12 +41,17 @@ bash tests/run_health.sh --ask-vault-pass
 ```
 
 This validates SSH/facts, Chrony, UFW, `/etc/hosts` resolution, node exporter,
-database services, PostgreSQL readiness and recovery roles, XFS mounts, WAL
-settings, the hourly WAL archive timer, postgres exporter, pg_auto_failover
-state, Keepalived parsing, exact VIP ownership, PgBouncer, HAProxy stats,
-PgBouncer exporter, and a SQL query through VIP → HAProxy → current primary.
+database services, PostgreSQL readiness and recovery roles, XFS mounts,
+provider-specific WAL settings, absence of active legacy monitor-WAL artifacts
+for Rubrik, postgres exporter, pg_auto_failover state, Keepalived parsing,
+exact VIP ownership, PgBouncer, HAProxy stats, PgBouncer exporter, and a SQL
+query through VIP → HAProxy → current primary.
 
-## WAL archive integration test
+## Legacy monitor WAL archive integration test
+
+This test is disabled for the UAT and Production Rubrik design. Use it only
+when `postgresql_wal_archive_provider=monitor_ssh`, including an approved
+rollback exercise:
 
 ```bash
 bash tests/run_wal_archive_test.sh --ask-vault-pass
@@ -55,6 +60,11 @@ bash tests/run_wal_archive_test.sh --ask-vault-pass
 This requires typing `WAL-ARCHIVE`, calls `pg_switch_wal()` on the current
 primary, and waits up to 180 seconds for the segment under
 `/pgdata/WalArchive` on the monitor.
+
+Rubrik backup completion, WAL/log recovery points and isolated restore/PITR
+must be validated in Rubrik and attached to the test evidence. Ansible health
+checks validate PostgreSQL has an active non-legacy archive command but do not
+claim that a Rubrik backup job succeeded.
 
 ## Routing failover test
 
@@ -87,11 +97,16 @@ Read-only tests only:
 bash tests/run_all.sh --ask-vault-pass
 ```
 
-Include all disruptive tests without interactive confirmations:
+Include routing and database disruptive tests without interactive
+confirmations:
 
 ```bash
 RUN_DISRUPTIVE=true bash tests/run_all.sh --ask-vault-pass
 ```
+
+The legacy WAL test is not included unless both `RUN_DISRUPTIVE=true` and
+`RUN_LEGACY_WAL_TEST=true` are set. Do not set the latter in Rubrik-managed UAT
+or Production.
 
 For unattended execution, prefer a protected Vault password file so each
 subtest does not prompt independently:
@@ -104,8 +119,8 @@ RUN_DISRUPTIVE=true bash tests/run_all.sh
 ## Client-observed DR readiness and failover exercise
 
 The client exercise requires an explicit inventory and runs baseline health,
-WAL archive, routing failover/restoration, controlled database
-switchover/switchback, and final health in one Ansible process:
+routing failover/restoration, controlled database switchover/switchback, and
+final health in one Ansible process:
 
 ```bash
 export INVENTORY="$PWD/inventories/uat_hosts.ini"
@@ -118,6 +133,10 @@ It requires typing `UAT-CLIENT-DR-FAILOVER` or
 `artifacts/client-dr/`. See `CLIENT_DR_FAILOVER_TEST_RUNBOOK.md` for manual
 commands, hold points, stop criteria, and the separate isolated backup/PITR DR
 test.
+
+The client acceptance record must separately include Rubrik base-backup,
+WAL/log recovery-point and isolated restore/PITR evidence. See
+`RUBRIK_WAL_CUTOVER_AND_DR_RUNBOOK.md`.
 
 ## Safety behavior
 

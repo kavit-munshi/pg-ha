@@ -8,25 +8,22 @@ PostgreSQL HA and disaster-recovery-readiness exercise.
 The standard exercise proves:
 
 - baseline platform health;
-- a completed WAL segment reaches the monitor archive;
 - the routing VIP moves to the peer router and SQL remains writable;
 - pg_auto_failover performs a controlled database switchover;
 - HAProxy follows the promoted writable primary;
 - routing and database topology return to the starting state;
 - final health checks pass.
 
-The standard exercise does not restore a physical base backup or perform PITR.
-A true restore test requires an isolated recovery host, a verified base backup,
-the required WAL chain, and the procedure in
-`DB_BACKUP_AND_RECOVERY_RUNBOOK.md`. Do not describe this failover exercise as
-proof of backup restorability.
+The standard exercise does not run a monitor WAL test, restore a Rubrik backup,
+or perform PITR. Rubrik backup/recovery-point evidence is attached separately,
+and a true restore test follows `RUBRIK_WAL_CUTOVER_AND_DR_RUNBOOK.md`. Do not
+describe this HA exercise as proof of backup restorability.
 
 ## 2. Risk and expected impact
 
 | Phase | Expected impact |
 |---|---|
 | Health checks | Read-only |
-| WAL test | Creates a restore point and forces one WAL switch |
 | Routing failover | Brief TCP reconnect while the VIP moves |
 | Database switchover | Existing sessions can disconnect; applications must reconnect |
 | Restoration switchover | A second brief database reconnect |
@@ -59,8 +56,9 @@ Do not begin until all items are confirmed:
 - pg_auto_failover reports stable primary/secondary states;
 - exactly one routing node owns the VIP;
 - application owners accept two reconnect events;
-- recent WAL archive success and adequate WAL/archive free space;
-- latest available physical base backup and its verification status recorded;
+- recent successful Rubrik base backup and WAL/log recovery point;
+- adequate `/pgdata/wal` free space and no rising archive failures;
+- latest isolated Rubrik restore/PITR result recorded;
 - rollback decision owner present.
 
 Stop criteria:
@@ -68,13 +66,13 @@ Stop criteria:
 - zero or two writable database nodes;
 - both routers own the VIP or neither can acquire it;
 - replication is not stable before database testing;
-- WAL/archive filesystem is near critical capacity;
+- the WAL filesystem is near critical capacity;
 - application cannot reconnect after the agreed threshold;
 - the `always` restoration phase fails;
 - any unexpected data-integrity result.
 
 If a stop criterion occurs, stop further testing, preserve logs, keep unsafe
-nodes fenced, and follow `DB_BACKUP_AND_RECOVERY_RUNBOOK.md`.
+   nodes fenced, and follow `RUBRIK_WAL_CUTOVER_AND_DR_RUNBOOK.md`.
 
 ## 5. Environment selection
 
@@ -127,12 +125,11 @@ It runs one Ansible process in this order:
 
 1. authorization and exercise identity validation;
 2. baseline comprehensive health;
-3. forced WAL archive test;
-4. routing VIP failover and automatic restoration;
-5. intermediate health validation;
-6. controlled database switchover and automatic switchback;
-7. final comprehensive health;
-8. completion report.
+3. routing VIP failover and automatic restoration;
+4. intermediate health validation;
+5. controlled database switchover and automatic switchback;
+6. final comprehensive health;
+7. completion report.
 
 Evidence is written to:
 
@@ -190,45 +187,16 @@ systemctl is-active keepalived haproxy pgbouncer
 
 Require exactly one VIP owner and one writable database before continuing.
 
-### 7.2 Phase 1: WAL archive test
+### 7.2 Phase 1: Rubrik evidence hold point
 
-Automated single phase:
+The backup operator records the latest successful Rubrik base backup, latest
+WAL/log recovery point, applicable SLA and most recent isolated restore/PITR
+test. The PostgreSQL operator confirms the effective archive command is
+nonempty and does not reference `/usr/local/sbin/archive-wal`.
 
-```bash
-bash tests/run_wal_archive_test.sh --ask-vault-pass
-```
-
-Manual equivalent on the current primary:
-
-```bash
-sudo -u postgres psql -X -d postgres -c \
-  "SELECT pg_create_restore_point( \
-     'client_dr_' || to_char(clock_timestamp(), 'YYYYMMDDHH24MISSUS'));"
-
-sudo -u postgres psql -X -At -d postgres -c \
-  "SELECT pg_walfile_name(pg_switch_wal());"
-```
-
-Record the returned filename. On the monitor:
-
-```bash
-sudo -u postgres test -f \
-  "/pgdata/WalArchive/<RETURNED_WAL_FILENAME>"
-
-sudo -u postgres ls -l \
-  "/pgdata/WalArchive/<RETURNED_WAL_FILENAME>"
-```
-
-On the primary:
-
-```bash
-sudo -u postgres psql -X -d postgres -c \
-  "SELECT archived_count, failed_count, last_archived_wal, \
-          last_archived_time, last_failed_wal, last_failed_time \
-   FROM pg_stat_archiver;"
-```
-
-Hold point: client and backup operator confirm WAL evidence.
+Do not run `tests/run_wal_archive_test.sh`; it exists only for the optional
+`monitor_ssh` rollback provider. Hold until the backup and database operators
+both accept the evidence.
 
 ### 7.3 Phase 2: routing VIP failover
 
@@ -328,7 +296,6 @@ Do not use `pg_ctl promote`.
 
 ```bash
 bash tests/run_health.sh --ask-vault-pass
-bash tests/run_wal_archive_test.sh --ask-vault-pass
 ```
 
 Require:
@@ -338,8 +305,9 @@ Require:
 - exactly one VIP owner;
 - SQL through the VIP reaches a writable primary;
 - synchronous streaming healthy;
-- WAL archiving successful;
-- all required timers/exporters/services active;
+- a new Rubrik WAL/log recovery point is recorded after switchover;
+- all required exporters and HA services are active;
+- legacy monitor-WAL timer and executable are absent;
 - no unexplained failed systemd unit;
 - application-owner transaction validation complete.
 
@@ -376,22 +344,13 @@ state and escalate through the database recovery runbook.
 
 ## 9. True backup/PITR DR test
 
-A complete DR certification additionally requires:
-
-1. select a verified physical base backup;
-2. prove the required WAL/timeline chain exists;
-3. restore into an isolated network with no route to the Production VIP,
-   monitor, or archive destination;
-4. run `pg_verifybackup` before recovery;
-5. start with `recovery.signal` and approved `restore_command`;
-6. replay to an approved UTC target or named restore point;
-7. validate business data read-only;
-8. record measured RPO and RTO;
-9. destroy or retain the isolated recovery environment according to policy.
-
-This phase cannot be automated against the live five-node environment. Follow
-Section 14 of `DB_BACKUP_AND_RECOVERY_RUNBOOK.md` after the designed base-backup
-solution is implemented and a DR recovery host is provisioned.
+A complete DR certification additionally requires selecting a successful
+Rubrik backup and recovery point, restoring it through the vendor-supported
+workflow into an isolated network, validating the recovered PostgreSQL data,
+recording measured RPO/RTO, and proving how the recovered primary is registered
+with a trusted monitor before a new standby is cloned. Follow
+`RUBRIK_WAL_CUTOVER_AND_DR_RUNBOOK.md`; never run this destructive restore
+against the live five-node environment.
 
 ## 10. Evidence and acceptance
 
@@ -404,14 +363,15 @@ Git revision:
 Client participants:
 UTC/local start and end:
 Initial primary and VIP owner:
-WAL segment archived:
+Rubrik base-backup ID/status:
+Rubrik WAL/log recovery point:
+Rubrik protection after promotion:
 Routing VIP move duration:
 Application reconnect duration:
 Promoted database node:
 Database switchover duration:
 Original topology restored:
 Final health result:
-Latest base-backup ID/status:
 Latest isolated restore test date:
 Exceptions/incidents:
 Client acceptance/signature:
@@ -420,4 +380,3 @@ Client acceptance/signature:
 Success requires every automated/manual assertion to pass and the client
 application owner to confirm business-safe connectivity before, during, and
 after both failover events.
-
