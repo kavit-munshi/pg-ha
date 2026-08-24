@@ -44,6 +44,35 @@
     - inventory_hostname in (groups['db_primary'] + groups['db_standby'])
     - wal_archive_cleanup_timer_unit.stat.exists
 
+- name: Detect legacy archive settings embedded in postgresql.conf
+  ansible.builtin.slurp:
+    src: "{{ pgdata_path }}/postgresql.conf"
+  register: wal_archive_cleanup_direct_legacy_settings
+  no_log: true
+  when: inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+
+- name: Remove legacy archive settings embedded in postgresql.conf
+  ansible.builtin.lineinfile:
+    path: "{{ pgdata_path }}/postgresql.conf"
+    regexp: "{{ item.regexp }}"
+    state: absent
+    backup: true
+  loop:
+    - setting: archive_command
+      regexp: ^\s*archive_command\s*=.*/usr/local/sbin/archive-wal.*$
+    - setting: archive_mode
+      regexp: ^\s*archive_mode\s*=\s*['"]?on['"]?\s*(?:#.*)?$
+    - setting: archive_timeout
+      regexp: ^\s*archive_timeout\s*=\s*['"]?300['"]?\s*(?:#.*)?$
+  loop_control:
+    label: "{{ item.setting }}"
+  notify: Restart pg_autoctl after legacy WAL cleanup
+  when:
+    - inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+    - >-
+      '/usr/local/sbin/archive-wal' in
+      (wal_archive_cleanup_direct_legacy_settings.content | b64decode)
+
 - name: Remove legacy monitor WAL archive include
   ansible.builtin.lineinfile:
     path: "{{ pgdata_path }}/postgresql-ha.conf"
