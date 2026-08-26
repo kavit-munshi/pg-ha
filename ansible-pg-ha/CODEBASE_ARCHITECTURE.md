@@ -42,38 +42,35 @@ Keepalived VIP on one routing node
     v
 HAProxy postgresql_write listener
     |
-    | external check selects only the pooler paired with a writable DB
+    | local TCP health check
     v
-PgBouncer:6432
+Local PgBouncer:127.0.0.1:6432
     |
-    | transaction pooling, TLS required to PostgreSQL
+    | transaction pooling
+    v
+Local HAProxy postgresql_primary_selector:127.0.0.1:6433
+    |
+    | external SQL check selects the writable data node
     v
 Current PostgreSQL primary:5432
 ```
 
 ### 2.2 Routing pair design
 
-Each PgBouncer has a fixed database candidate:
-
-| Environment | Routing host | `routing_slot` | PgBouncer database target |
-|---|---|---|---|
-| UAT | `BHC-PGBSQLU03` | `primary` | `BHC-QMSSQLU05` |
-| UAT | `BHC-PGBSQLU04` | `standby` | `BHC-QMSSQLU06` |
-| Production | `BHC-PGBSQLP01` | `primary` | `BHC-QMSSQLP01.bayshore.ca` |
-| Production | `BHC-PGBSQLP02` | `standby` | `BHC-QMSSQLP02.bayshore.ca` |
-
-HAProxy on both routing hosts lists both PgBouncer instances as backends.
-Before enabling a backend, `/usr/local/sbin/check-pg-primary` maps the backend
-routing IP to its paired PostgreSQL IP and executes:
+Each routing host has the same self-contained stack. The VIP listener sends
+connections only to its local PgBouncer. PgBouncer sends database connections
+only to the local loopback primary-selector listener. That HAProxy listener
+lists both PostgreSQL data candidates and `/usr/local/sbin/check-pg-primary`
+executes against each candidate:
 
 ```sql
 SELECT pg_is_in_recovery();
 ```
 
-Only `false` is accepted. After pg_auto_failover promotes the configured
-standby, HAProxy disables the initial-primary routing path and enables the
-standby routing path. The fixed pairing therefore follows promotions without
-rewriting PgBouncer configuration in either environment.
+Only `false` is accepted. After pg_auto_failover promotes a standby, both
+routers independently disable the old primary and enable the promoted node.
+There is no router-to-database pairing. PgBouncer must never target the VIP,
+because that would create a HAProxy → PgBouncer → VIP routing loop.
 
 ## 3. Repository layout (complete)
 
@@ -259,17 +256,12 @@ variable file. The deployed Production routing hosts may resolve with the
 `.bayshore.ca` DNS suffix; if FQDNs are used as inventory names, the keys in
 `host_ips` must use those exact same strings.
 
-### 5.1 Why `routing_slot` exists
+### 5.1 Why `routing_slot` remains
 
-`routing_slot` is a host variable used by two roles:
-
-- `pgbouncer` chooses the member of `db_primary` for `primary` and the member
-  of `db_standby` for `standby`;
-- `keepalived_haproxy` chooses MASTER/priority 101 for `primary` and
-  BACKUP/priority 100 for `standby`.
-
-It describes initial routing placement, not the current PostgreSQL state.
-HAProxy determines current write eligibility dynamically.
+`routing_slot` is used only by `keepalived_haproxy` to choose the preferred VIP
+owner: MASTER/priority 101 for `primary`, and BACKUP/priority 100 for `standby`.
+It no longer selects a PostgreSQL target. Both routing nodes use the same two
+database candidates and determine current write eligibility dynamically.
 
 ## 6. Variable hierarchy
 
@@ -433,7 +425,6 @@ verbose status.
 | DB cluster | 5432/tcp | `ufw_database_allowed_cidrs` |
 | DB cluster | 9187/tcp | `metrics_allowed_cidr` |
 | Routing | 5432/tcp | each entry in `application_client_cidrs` |
-| Routing | 6432/tcp | `cluster_cidr` |
 | Routing | 9127/tcp | `metrics_allowed_cidr` |
 | Routing | VRRP/112 | other router IP only |
 
@@ -445,7 +436,8 @@ manual rules do not survive.
 
 HAProxy statistics port 8404 is bound by HAProxy but not opened externally by
 UFW. It is intended for local inspection unless an explicitly reviewed rule is
-added.
+added. PgBouncer 6432 and the HAProxy primary-selector port 6433 bind only to
+loopback and therefore have no incoming UFW exception.
 
 ## 8.3 `os_tuning`
 
@@ -680,7 +672,8 @@ VIP, node IP, and hostname SANs.
 
 | Setting | Value |
 |---|---:|
-| Listen | `0.0.0.0:6432` |
+| Listen | `127.0.0.1:6432` |
+| Database target | `127.0.0.1:6433` HAProxy primary selector |
 | Pool mode | `transaction` |
 | Maximum clients | 5000 |
 | Default pool | 100 |
@@ -711,6 +704,11 @@ test server-side authentication behavior before rollout.
 
 Target: routing nodes, after PgBouncer.
 
+The routing play uses `serial: 1` with reverse inventory order so the preferred
+BACKUP router is configured before the preferred VIP owner. This limits the
+migration window and ensures a converted peer is available before the active
+routing stack is restarted.
+
 ### Keepalived
 
 The role validates that the VRRP PASS token is 1–8 characters, then derives:
@@ -727,8 +725,8 @@ The role validates that the VRRP PASS token is 1–8 characters, then derives:
 - `virtual_router_id=51`;
 - one-second advertisements;
 - the configured VIP/prefix/interface;
-- an HAProxy service tracking script;
-- priority penalty when HAProxy is unhealthy.
+- a local routing-stack tracking script;
+- priority penalty when HAProxy, PgBouncer, or either loopback listener is unhealthy.
 
 The UFW role allows VRRP only from the other router to the local router IP.
 
@@ -739,9 +737,11 @@ HAProxy even when only one owns the VIP.
 
 HAProxy:
 
-- binds `VIP:5432` in TCP mode;
-- lists both routing-node PgBouncer endpoints on port 6432;
-- runs an external check every three seconds;
+- binds `VIP:5432` and sends traffic only to local PgBouncer at
+  `127.0.0.1:6432`;
+- binds the primary selector at `127.0.0.1:6433`;
+- lists both PostgreSQL data candidates on the selector backend;
+- runs an external SQL check against each data candidate every three seconds;
 - marks down after two failures and up after two successes;
 - closes sessions when a backend is marked down;
 - exposes a local runtime socket;
@@ -749,9 +749,8 @@ HAProxy:
 
 ### Primary health check
 
-`check-pg-primary.sh.j2` receives the HAProxy backend address, maps it to the
-paired database, connects using the restricted `haproxy_check` login, and
-requires:
+`check-pg-primary.sh.j2` receives each PostgreSQL backend address directly,
+connects using the restricted `haproxy_check` login, and requires:
 
 ```text
 pg_is_in_recovery() = false

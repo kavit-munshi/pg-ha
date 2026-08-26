@@ -225,6 +225,40 @@
                   rc={{ test_db_sql_after_failover.rc | default('unavailable') }}
                   stdout={{ test_db_sql_after_failover.stdout | default('') | trim }}
                   stderr={{ test_db_sql_after_failover.stderr | default('') | trim }}
+
+        - name: Verify every router follows the promoted primary locally
+          ansible.builtin.command:
+            argv:
+              - psql
+              - --host
+              - "{{ pgbouncer_listen_address }}"
+              - --port
+              - "{{ pgbouncer_listen_port | string }}"
+              - --username
+              - "{{ app_db_user }}"
+              - --dbname
+              - "{{ app_database }}"
+              - --no-psqlrc
+              - --tuples-only
+              - --no-align
+              - --command
+              - >-
+                SELECT host(inet_server_addr()) || '|' ||
+                CASE WHEN pg_is_in_recovery() THEN 't' ELSE 'f' END;
+          environment:
+            PGPASSWORD: "{{ app_db_password }}"
+          delegate_to: "{{ item }}"
+          loop: "{{ groups['routing_nodes'] }}"
+          register: test_db_local_poolers_after_failover
+          changed_when: false
+          no_log: true
+          retries: 30
+          delay: 2
+          until:
+            - test_db_local_poolers_after_failover.rc == 0
+            - >-
+              (test_db_local_poolers_after_failover.stdout | trim) ==
+              (host_ips[test_db_promotion_target] ~ '|f')
       always:
         - name: Wait for a stable cluster before restoration
           ansible.builtin.command:
@@ -344,6 +378,40 @@
                   rc={{ test_db_sql_restored.rc | default('unavailable') }}
                   stdout={{ test_db_sql_restored.stdout | default('') | trim }}
                   stderr={{ test_db_sql_restored.stderr | default('') | trim }}
+
+        - name: Verify every router follows the restored primary locally
+          ansible.builtin.command:
+            argv:
+              - psql
+              - --host
+              - "{{ pgbouncer_listen_address }}"
+              - --port
+              - "{{ pgbouncer_listen_port | string }}"
+              - --username
+              - "{{ app_db_user }}"
+              - --dbname
+              - "{{ app_database }}"
+              - --no-psqlrc
+              - --tuples-only
+              - --no-align
+              - --command
+              - >-
+                SELECT host(inet_server_addr()) || '|' ||
+                CASE WHEN pg_is_in_recovery() THEN 't' ELSE 'f' END;
+          environment:
+            PGPASSWORD: "{{ app_db_password }}"
+          delegate_to: "{{ item }}"
+          loop: "{{ groups['routing_nodes'] }}"
+          register: test_db_local_poolers_restored
+          changed_when: false
+          no_log: true
+          retries: 30
+          delay: 2
+          until:
+            - test_db_local_poolers_restored.rc == 0
+            - >-
+              (test_db_local_poolers_restored.stdout | trim) ==
+              (host_ips[test_db_original_primary] ~ '|f')
 
         - name: Report database failover result
           ansible.builtin.debug:

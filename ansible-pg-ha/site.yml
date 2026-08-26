@@ -15,6 +15,10 @@
           - "'any' not in application_client_cidrs"
           - "'0.0.0.0/0' not in application_client_cidrs"
           - postgresql_vip | length > 0
+          - pgbouncer_listen_address in ['127.0.0.1', '::1']
+          - haproxy_primary_selector_address in ['127.0.0.1', '::1']
+          - pgbouncer_listen_port | int != haproxy_primary_selector_port | int
+          - haproxy_primary_selector_port | int != haproxy_listen_port | int
           - prometheus_scrape_cidr | length > 0
           - keepalived_interface | length > 0
           - keepalived_interface != "CHANGE_ME"
@@ -49,7 +53,9 @@
   hosts: all_nodes
   become: true
   roles:
-    - ufw_firewall
+    - role: ufw_firewall
+      tags:
+        - firewall
     - os_tuning
     - role: storage_lvm
       when: storage_lvm_enabled | default(false) | bool
@@ -94,6 +100,8 @@
 
 - name: Configure connection and routing tier
   hosts: routing_nodes
+  order: reverse_inventory
+  serial: 1
   become: true
   roles:
     - role: pgbouncer

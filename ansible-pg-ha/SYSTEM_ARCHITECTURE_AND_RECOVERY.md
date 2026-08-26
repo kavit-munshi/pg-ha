@@ -92,8 +92,9 @@ WAL archiving is a recovery input, not a complete backup policy.
 1. One authoritative writable PostgreSQL primary at a time.
 2. pg_auto_failover owns database promotion and demotion.
 3. Keepalived owns the application VIP; applications do not target DB nodes.
-4. HAProxy enables only a route whose paired PostgreSQL node is writable.
-5. PgBouncer uses transaction pooling and fixed DB-node pairing.
+4. Each router's HAProxy primary selector enables only the writable data node.
+5. PgBouncer uses transaction pooling and a loopback selector, never a fixed
+   database target or the application VIP.
 6. Storage identity and mount correctness are prerequisites for service start.
 7. Chrony synchronization is required before HA initialization or rejoin.
 8. UFW exposes only declared role-specific ports and source networks.
@@ -110,8 +111,8 @@ WAL archiving is a recovery input, not a complete backup policy.
 | `db_primary` | `BHC-QMSSQLU05` | `192.168.129.105` | Initial data-node primary |
 | `db_standby` | `BHC-QMSSQLU06` | `192.168.129.106` | Initial synchronous standby |
 | `db_monitor` | `BHC-QMSSQLU07` | `192.168.129.107` | Monitor and WAL archive |
-| routing slot `primary` | `BHC-PGBSQLU03` | `192.168.129.108` | Initial VIP MASTER and U05 pooler |
-| routing slot `standby` | `BHC-PGBSQLU04` | `192.168.129.109` | Initial VIP BACKUP and U06 pooler |
+| routing slot `primary` | `BHC-PGBSQLU03` | `192.168.129.108` | Preferred VIP owner; dynamic primary routing |
+| routing slot `standby` | `BHC-PGBSQLU04` | `192.168.129.109` | Backup VIP owner; dynamic primary routing |
 
 | UAT network item | Value |
 |---|---|
@@ -127,8 +128,8 @@ WAL archiving is a recovery input, not a complete backup policy.
 | `db_primary` | `BHC-QMSSQLP01.bayshore.ca` | `192.168.128.134` | Initial data-node primary |
 | `db_standby` | `BHC-QMSSQLP02.bayshore.ca` | `192.168.128.135` | Initial synchronous standby |
 | `db_monitor` | `BHC-QMSSQLP03.bayshore.ca` | `192.168.128.136` | Monitor and WAL archive |
-| routing slot `primary` | `BHC-PGBSQLP01` | `192.168.128.137` | Initial VIP MASTER and P01 pooler |
-| routing slot `standby` | `BHC-PGBSQLP02` | `192.168.128.138` | Initial VIP BACKUP and P02 pooler |
+| routing slot `primary` | `BHC-PGBSQLP01` | `192.168.128.137` | Preferred VIP owner; dynamic primary routing |
+| routing slot `standby` | `BHC-PGBSQLP02` | `192.168.128.138` | Backup VIP owner; dynamic primary routing |
 
 | Production network item | Value |
 |---|---|
@@ -148,7 +149,9 @@ flowchart LR
     VIP --> R1["Routing node 1<br/>HAProxy + PgBouncer"]
     VIP -. "VRRP failover" .-> R2["Routing node 2<br/>HAProxy + PgBouncer"]
     R1 -->|"primary-aware route"| DB1["PostgreSQL data node 1"]
-    R2 -->|"primary-aware route"| DB2["PostgreSQL data node 2"]
+    R1 -->|"primary-aware route"| DB2["PostgreSQL data node 2"]
+    R2 -->|"primary-aware route"| DB1
+    R2 -->|"primary-aware route"| DB2
     DB1 <-->|"synchronous streaming replication"| DB2
     MON["pg_auto_failover monitor"] <-->|"health and state orchestration"| DB1
     MON <-->|"health and state orchestration"| DB2
@@ -165,20 +168,21 @@ flowchart LR
 
 1. The application connects to the environment VIP on port 5432.
 2. Keepalived places that VIP on exactly one routing node.
-3. HAProxy considers both routing-node PgBouncer services as backends.
-4. `/usr/local/sbin/check-pg-primary` maps each router to its paired database
-   and runs `SELECT pg_is_in_recovery()`.
-5. Only the pooler paired with a node returning `false` is eligible.
-6. PgBouncer forwards the transaction to PostgreSQL.
+3. VIP-facing HAProxy sends the connection to PgBouncer on the same router.
+4. PgBouncer sends server connections to local HAProxy on `127.0.0.1:6433`.
+5. `/usr/local/sbin/check-pg-primary` checks both data candidates with
+   `SELECT pg_is_in_recovery()`.
+6. Only the candidate returning `false` is eligible.
 
-The fixed pairings are:
+Both routers have identical database candidate lists. `routing_slot` controls
+only Keepalived preference and has no effect on database selection. The
+selector is loopback-only, and PgBouncer must not target the VIP because doing
+so would create a routing loop.
 
-| Environment | Router | Database candidate |
-|---|---|---|
-| UAT | U03 | U05 |
-| UAT | U04 | U06 |
-| Production | routing P01 | database P01 |
-| Production | routing P02 | database P02 |
+During a database promotion, HAProxy closes server sessions attached to the
+demoted backend. In-flight transactions can fail and must be retried by the
+application; new PgBouncer server connections are opened through the promoted
+primary selector.
 
 ### 6.2 Database failover flow
 
@@ -187,7 +191,7 @@ Primary failure
     -> monitor confirms health/state conditions
     -> standby is promoted
     -> HAProxy check detects new writable node
-    -> corresponding PgBouncer backend becomes UP
+    -> both routers' primary selectors enable the promoted node
     -> VIP remains available through routing tier
 ```
 
@@ -200,7 +204,7 @@ transition and split-brain prevention states.
 Active router/HAProxy failure
     -> Keepalived health/VRRP detects loss
     -> peer router acquires VIP
-    -> peer HAProxy selects writable-primary-paired PgBouncer
+    -> peer HAProxy uses its local PgBouncer and writable-primary selector
     -> clients reconnect to the same VIP
 ```
 
@@ -222,11 +226,13 @@ Active router/HAProxy failure
 
 ### 7.2 Routing tier
 
-- PgBouncer listens on 6432 with transaction pooling.
-- HAProxy listens on the VIP at 5432 and exposes local statistics at 8404.
-- Keepalived uses unicast VRRP, priority 101/100, and tracks HAProxy.
-- A PgBouncer failure removes that backend from HAProxy. Because each HAProxy
-  lists both poolers, the peer pooler can still be used.
+- PgBouncer listens only on `127.0.0.1:6432` with transaction pooling.
+- HAProxy listens on the VIP at 5432, selects the database primary on
+  `127.0.0.1:6433`, and exposes local statistics at 8404.
+- Keepalived uses unicast VRRP, priority 101/100, and tracks HAProxy,
+  PgBouncer, and both local listeners.
+- A PgBouncer failure makes the local routing stack unhealthy, allowing
+  Keepalived to move the VIP to the peer router.
 - An HAProxy failure reduces Keepalived priority so the peer should own the VIP.
 
 ### 7.3 Storage
@@ -279,7 +285,6 @@ The `wal_archive_cleanup` role rejects a Rubrik cutover unless PostgreSQL has
 | Prometheus source | DB nodes | TCP 9187 | PostgreSQL exporter |
 | Prometheus source | routers | TCP 9127 | PgBouncer exporter |
 | Application CIDRs | routing VIP/nodes | TCP 5432 | database service |
-| Cluster/router CIDRs | routers | TCP 6432 | HAProxy to PgBouncer |
 | DB/monitor cluster peers | DB nodes | TCP 5432 | PostgreSQL and monitor |
 | Data nodes | monitor | TCP 22 | WAL archive transport |
 | Routing peers | routing peers | IP protocol 112 | VRRP |
@@ -306,6 +311,9 @@ unreliable. Correct time before rejoining a node.
 | PgBouncer exporter | 9127 | routing nodes |
 | HAProxy stats | 8404 | local/approved monitoring access |
 
+Ports 6432 and 6433 are loopback-only routing internals and are not exposed by
+UFW. Applications use only VIP port 5432.
+
 Exporter failure is monitoring degradation, not database failover. Alerting
 must distinguish telemetry loss from service loss.
 
@@ -323,7 +331,7 @@ recovery automation only.
 |---|---|---|
 | One data node | Peer can provide DB service | no DB-node redundancy until repair |
 | Active routing node | VIP transfers to peer | no routing redundancy until repair |
-| One PgBouncer | HAProxy removes backend | capacity/redundancy reduced |
+| One PgBouncer | local routing stack loses VIP eligibility | routing redundancy reduced |
 | HAProxy on VIP owner | Keepalived moves VIP | routing redundancy reduced |
 | Monitor | current DB service may continue | automated DB failover unavailable |
 | WAL archive filesystem | DB continues while `pg_wal` has space | RPO chain and eventual DB availability at risk |
@@ -433,7 +441,8 @@ Do not:
 
 **Expected automatic response**
 
-The healthy standby is promoted and HAProxy enables its paired PgBouncer path.
+The healthy standby is promoted and both HAProxy primary selectors enable the
+promoted node.
 
 **Procedure**
 
@@ -709,17 +718,19 @@ runbook. Do not start a PITR-restored server alongside the live HA cluster.
 
 ### 15.2 PgBouncer failure
 
-HAProxy should mark the failed pooler backend down and use the peer pooler when
-that peer's paired database is writable.
+Keepalived's routing-stack check should remove VIP eligibility from the router
+whose local PgBouncer failed. The peer router continues through its own local
+PgBouncer and primary selector.
 
 ```bash
 sudo systemctl status pgbouncer --no-pager
 sudo journalctl -u pgbouncer -n 200 --no-pager
-sudo ss -lntp | grep ':6432'
+sudo ss -lntp | grep -E '127\.0\.0\.1:(6432|6433)'
 ```
 
-After correction, restart PgBouncer, verify `SHOW POOLS`, and inspect the
-HAProxy runtime socket.
+After correction, restart PgBouncer, verify `SHOW POOLS`, verify SQL through
+both loopback ports, and inspect the HAProxy runtime socket before allowing the
+router to reclaim the VIP.
 
 ### 15.3 HAProxy failure
 
@@ -727,7 +738,8 @@ Keepalived tracks HAProxy and should move the VIP. Validate before restart:
 
 ```bash
 sudo haproxy -c -f /etc/haproxy/haproxy.cfg
-sudo -u haproxy env HAPROXY_SERVER_ADDR='<paired-database-IP>' \
+sudo -u haproxy env HAPROXY_SERVER_ADDR='<database-node-IP>' \
+  HAPROXY_SERVER_PORT=5432 \
   /usr/local/sbin/check-pg-primary
 sudo systemctl restart haproxy
 ```
@@ -865,8 +877,10 @@ Minimum acceptance evidence:
 3. Standby is streaming and caught up within the approved lag threshold.
 4. Synchronous settings match policy.
 5. Exactly one router owns the VIP.
-6. HAProxy shows an UP write backend paired with the current primary.
-7. PgBouncer `SHOW POOLS` succeeds.
+6. HAProxy shows local PgBouncer UP and exactly one UP data node in
+   `postgresql_primary_selector`.
+7. PgBouncer `SHOW POOLS` succeeds and local SQL through both 6432 and 6433
+   reaches the current primary.
 8. VIP SQL reaches the current primary.
 9. All required XFS/LVM/bind mounts and `/etc/fstab` entries are correct.
 10. Chrony reports a selected source and normal leap status.

@@ -70,12 +70,16 @@
     mode: "0644"
   notify: Restart PgBouncer
 
-- name: Select database candidate paired with this pooler
-  ansible.builtin.set_fact:
-    pgbouncer_database_host: >-
-      {{ host_ips[groups['db_primary'][0]]
-         if routing_slot == 'primary'
-         else host_ips[groups['db_standby'][0]] }}
+- name: Validate local primary-selector settings
+  ansible.builtin.assert:
+    that:
+      - pgbouncer_listen_address in ['127.0.0.1', '::1']
+      - haproxy_primary_selector_address in ['127.0.0.1', '::1']
+      - pgbouncer_listen_port | int != haproxy_primary_selector_port | int
+      - haproxy_primary_selector_port | int != haproxy_listen_port | int
+    fail_msg: >-
+      PgBouncer and the HAProxy primary selector must use distinct ports and
+      remain bound to loopback to avoid a routing loop or unintended exposure.
 
 - name: Deploy PgBouncer configuration
   ansible.builtin.template:

@@ -1,9 +1,9 @@
 ; Managed by Ansible.
 [databases]
-{{ app_database }} = host={{ pgbouncer_database_host }} port={{ postgresql_port }} dbname={{ app_database }} user={{ app_db_user }} client_encoding=UTF8
+{{ app_database }} = host={{ haproxy_primary_selector_address }} port={{ haproxy_primary_selector_port }} dbname={{ app_database }} user={{ app_db_user }} client_encoding=UTF8
 
 [pgbouncer]
-listen_addr = 0.0.0.0
+listen_addr = {{ pgbouncer_listen_address }}
 listen_port = {{ pgbouncer_listen_port }}
 unix_socket_dir = /run/pgbouncer
 auth_type = scram-sha-256

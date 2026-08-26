@@ -26,11 +26,11 @@ The checked-in Production inventory may use short routing aliases while DNS
 reports the FQDNs shown above. Whichever form is used for `inventory_hostname`
 must have an exact matching key in `group_vars/prod.yml` under `host_ips`.
 
-Client writes enter the Keepalived VIP on TCP 5432. HAProxy's external health
-check maps each PgBouncer backend to its paired PostgreSQL node and accepts the
-backend only when `SELECT pg_is_in_recovery()` returns `false`. After a
-pg_auto_failover promotion, HAProxy therefore selects the PgBouncer paired with
-the new primary.
+Client writes enter the Keepalived VIP on TCP 5432. VIP-facing HAProxy forwards
+only to PgBouncer on the same router. PgBouncer connects to a loopback-only
+HAProxy primary selector on TCP 6433, which checks both data nodes and accepts
+only the node where `SELECT pg_is_in_recovery()` returns `false`. Either routing
+node therefore follows every pg_auto_failover promotion without fixed pairing.
 
 Rubrik is the sole database and archived-WAL protection owner in UAT and
 Production. The former SSH/rsync archive to the monitor is disabled and kept as
@@ -78,7 +78,7 @@ Confirm the routing VIP-facing NIC name. UAT currently uses `ens33`; configure
 Network prerequisites:
 
 - Control server to all nodes: TCP 22
-- All five nodes inside `cluster_cidr`: PostgreSQL 5432 and PgBouncer 6432
+- Routing nodes to database nodes: PostgreSQL 5432
 - VRRP unicast between the selected environment's two routing nodes
 - Application CIDR to routing nodes/VIP: TCP 5432
 - Prometheus CIDR to all nodes: 9100; DB nodes: 9187; routers: 9127 and 8404
@@ -295,8 +295,9 @@ ansible all -i "$INVENTORY" -m command \
 Every node must report `Status: active`, default incoming `deny`, default
 outgoing `allow`, and only its role-specific rules. Common rules are SSH 22 and
 node exporter 9100. Database nodes additionally expose 5432 and 9187. Routing
-nodes additionally expose 5432, 6432, 9127, plus a VRRP rule restricted to the
-other routing node.
+nodes additionally expose 5432 and 9127, plus a VRRP rule restricted to the
+other routing node. PgBouncer 6432 and the HAProxy primary selector 6433 are
+loopback-only and require no UFW ingress rule.
 
 On both data nodes in the selected environment, verify the WAL bind mount and
 pg_autoctl:
@@ -339,6 +340,16 @@ blocking all commits.
 
 ## 9. Verify VIP, HAProxy, and PgBouncer
 
+For an existing fixed-pair deployment, roll out UAT before Production using:
+
+```bash
+ansible-playbook -i inventories/uat_hosts.ini site.yml \
+  --limit routing_nodes --tags firewall,routing --ask-vault-pass
+```
+
+After UAT health and failover tests pass, substitute `prod_hosts.ini`. The play
+updates the backup-preferred router first and one router at a time.
+
 On both routing nodes:
 
 ```bash
@@ -346,6 +357,7 @@ systemctl status pgbouncer haproxy keepalived --no-pager
 ip -brief address show dev ens33
 echo "show stat" | sudo socat stdio /run/haproxy/admin.sock
 curl -fsS http://127.0.0.1:8404/stats >/dev/null
+ss -lnt | grep -E '127\.0\.0\.1:(6432|6433)'
 ```
 
 The VIP should appear on only one router. Install `socat` for the runtime-socket
@@ -357,6 +369,19 @@ Check PgBouncer locally, substituting the Vault value:
 PGPASSWORD='<postgres_exporter_password>' \
 psql -h 127.0.0.1 -p 6432 -U pgbouncer_exporter pgbouncer -c 'SHOW POOLS;'
 ```
+
+On each router, verify the primary selector and the complete local pooler path:
+
+```bash
+PGPASSWORD='<app_db_password>' \
+psql "host=127.0.0.1 port=6433 dbname=qms user=qms_app sslmode=require" \
+  -Atc "SELECT host(inet_server_addr()), pg_is_in_recovery();"
+PGPASSWORD='<app_db_password>' \
+psql "host=127.0.0.1 port=6432 dbname=qms user=qms_app sslmode=require" \
+  -Atc "SELECT host(inet_server_addr()), pg_is_in_recovery();"
+```
+
+Both commands must report the same current database primary and `f`.
 
 Check the complete application path through the VIP:
 
@@ -452,10 +477,12 @@ journalctl -u prometheus-postgres-exporter \
 tail -n 100 /pgdata/log/postgresql-*.log
 ```
 
-If both HAProxy backends are down, run the external check manually on a router:
+If both HAProxy primary-selector backends are down, run the external check
+manually on a router for each database node:
 
 ```bash
-sudo -u haproxy env HAPROXY_SERVER_ADDR=<router-ip> \
+sudo -u haproxy env HAPROXY_SERVER_ADDR=<database-node-ip> \
+  HAPROXY_SERVER_PORT=5432 \
   /usr/local/sbin/check-pg-primary
 ```
 
