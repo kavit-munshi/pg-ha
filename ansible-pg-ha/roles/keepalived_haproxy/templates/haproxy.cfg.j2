@@ -22,12 +22,18 @@ defaults
 listen postgresql_write
     bind {{ postgresql_vip }}:{{ haproxy_listen_port }}
     mode tcp
+    default-server inter 2s fall 2 rise 2 on-marked-down shutdown-sessions
+    server local_pgbouncer {{ pgbouncer_listen_address }}:{{ pgbouncer_listen_port }} check
+
+listen postgresql_primary_selector
+    bind {{ haproxy_primary_selector_address }}:{{ haproxy_primary_selector_port }}
+    mode tcp
     option external-check
     external-check path "/usr/local/sbin:/usr/bin:/bin"
     external-check command check-pg-primary
     default-server inter 3s fall 2 rise 2 on-marked-down shutdown-sessions
-{% for router in groups['routing_nodes'] %}
-    server {{ router }} {{ host_ips[router] }}:{{ pgbouncer_listen_port }} check
+{% for database_node in (groups['db_primary'] + groups['db_standby']) %}
+    server {{ database_node | replace('.', '_') }} {{ host_ips[database_node] }}:{{ postgresql_port }} check
 {% endfor %}
 
 listen statistics

@@ -67,15 +67,6 @@
   loop: "{{ application_client_cidrs }}"
   when: inventory_hostname in groups['routing_nodes']
 
-- name: Allow HAProxy connections to PgBouncer
-  community.general.ufw:
-    rule: allow
-    from_ip: "{{ cluster_cidr }}"
-    to_port: "{{ pgbouncer_listen_port | string }}"
-    proto: tcp
-    comment: HAProxy to PgBouncer
-  when: inventory_hostname in groups['routing_nodes']
-
 - name: Allow PgBouncer exporter from scraper network
   community.general.ufw:
     rule: allow

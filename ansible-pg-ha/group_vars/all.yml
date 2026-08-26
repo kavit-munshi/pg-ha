@@ -54,6 +54,11 @@ pg_auto_failover_replication_user: pgautofailover_replicator
 
 app_database: qms
 app_db_user: qms_app
+# PgBouncer is local to each routing node. It sends server connections to the
+# loopback-only HAProxy primary selector instead of being paired with one fixed
+# PostgreSQL node. The selector health-checks both data nodes and enables only
+# the node that currently reports pg_is_in_recovery() = false.
+pgbouncer_listen_address: 127.0.0.1
 pgbouncer_listen_port: 6432
 pgbouncer_max_client_conn: 5000
 pgbouncer_default_pool_size: 100
@@ -61,6 +66,8 @@ pgbouncer_max_prepared_statements: 100
 pgbouncer_pool_mode: transaction
 
 haproxy_listen_port: 5432
+haproxy_primary_selector_address: 127.0.0.1
+haproxy_primary_selector_port: 6433
 haproxy_stats_port: 8404
 postgresql_vip_hostname: ""
 # Default for UAT; Production overrides this in group_vars/prod.yml.

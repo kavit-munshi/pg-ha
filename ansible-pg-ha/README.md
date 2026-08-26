@@ -46,11 +46,12 @@ Environment-specific addresses are in `group_vars/uat.yml` and
 The write path is:
 
 ```text
-application -> VIP:5432 -> HAProxy -> active-primary-paired PgBouncer:6432
-            -> PostgreSQL primary:5432
+application -> VIP:5432 -> HAProxy -> local PgBouncer:6432
+            -> local HAProxy primary selector:6433 -> PostgreSQL primary:5432
 ```
 
-Each PgBouncer is deliberately paired with one database candidate. HAProxy
-checks that candidate with `SELECT pg_is_in_recovery()` and disables its paired
-pooler unless the result is `false`. This retains PgBouncer in the backend pool
-while following pg_auto_failover promotions.
+Both routing nodes use the same dynamic topology. PgBouncer never targets the
+VIP or a fixed database node; it targets a loopback-only HAProxy listener that
+checks both data candidates with `SELECT pg_is_in_recovery()` and enables only
+the writable primary. This avoids a routing loop and lets either pooler follow
+every pg_auto_failover promotion without a configuration rewrite.

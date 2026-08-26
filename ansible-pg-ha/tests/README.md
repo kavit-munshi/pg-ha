@@ -44,8 +44,10 @@ This validates SSH/facts, Chrony, UFW, `/etc/hosts` resolution, node exporter,
 database services, PostgreSQL readiness and recovery roles, XFS mounts,
 provider-specific WAL settings, absence of active legacy monitor-WAL artifacts
 for Rubrik, postgres exporter, pg_auto_failover state, Keepalived parsing,
-exact VIP ownership, PgBouncer, HAProxy stats, PgBouncer exporter, and a SQL
-query through VIP → HAProxy → current primary.
+exact VIP ownership, both loopback routing listeners, PgBouncer, HAProxy stats,
+PgBouncer exporter, and SQL through both the local pooler path and the complete
+VIP → HAProxy → local PgBouncer → HAProxy primary selector → current primary
+path.
 
 ## Legacy monitor WAL archive integration test
 

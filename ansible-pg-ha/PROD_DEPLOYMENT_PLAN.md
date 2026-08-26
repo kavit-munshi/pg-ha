@@ -15,12 +15,18 @@ No Production password is stored in this document.
 | `db_primary` | `BHC-QMSSQLP01.bayshore.ca` | `192.168.128.134` | PostgreSQL primary |
 | `db_standby` | `BHC-QMSSQLP02.bayshore.ca` | `192.168.128.135` | Synchronous standby |
 | `db_monitor` | `BHC-QMSSQLP03.bayshore.ca` | `192.168.128.136` | pg_auto_failover monitor |
+| `routing_nodes` | `BHC-PGBSQLP01` | `192.168.128.137` | Preferred VIP owner, HAProxy, PgBouncer |
+| `routing_nodes` | `BHC-PGBSQLP02` | `192.168.128.138` | Backup VIP owner, HAProxy, PgBouncer |
 
 Rubrik is the Production database and archived-WAL protection owner. The
 legacy monitor archive must remain disabled except during an approved rollback;
 see `RUBRIK_WAL_CUTOVER_AND_DR_RUNBOOK.md`.
-| `routing_nodes` | `BHC-PGBSQLP01` | `192.168.128.137` | Preferred VIP owner, HAProxy, PgBouncer |
-| `routing_nodes` | `BHC-PGBSQLP02` | `192.168.128.138` | Backup VIP owner, HAProxy, PgBouncer |
+
+Both routing nodes use identical dynamic database routing. The application VIP
+listener sends traffic to local PgBouncer on `127.0.0.1:6432`; PgBouncer sends
+server connections to the local HAProxy primary selector on
+`127.0.0.1:6433`. That selector checks both Production data nodes and enables
+only the current writable primary. There is no router-to-database pairing.
 
 External/unmanaged endpoints:
 

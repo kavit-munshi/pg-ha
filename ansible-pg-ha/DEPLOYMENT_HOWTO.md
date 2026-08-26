@@ -425,6 +425,34 @@ Production hosts listed in Section 1 and must reject every remaining
 
 ## 8. Step 4 — Post-deployment verification
 
+### 8.0 Upgrade an existing fixed-pair routing deployment
+
+Apply this architecture change to UAT first. The command updates only the two
+routing nodes, removes the obsolete external 6432 UFW rule, converts PgBouncer
+to loopback, and installs the HAProxy primary selector:
+
+```bash
+ansible-playbook -i inventories/uat_hosts.ini site.yml \
+  --limit routing_nodes \
+  --tags firewall,routing \
+  --ask-vault-pass
+```
+
+Run the health and database-failover tests described below. Promote the same
+Git revision to Production only after UAT proves that both local poolers follow
+both database roles. Then run:
+
+```bash
+ansible-playbook -i inventories/prod_hosts.ini site.yml \
+  --limit routing_nodes \
+  --tags firewall,routing \
+  --ask-vault-pass
+```
+
+The routing play converts the backup-preferred router first and processes one
+router at a time. Keep an application retry policy active: pooled connections
+to the old database can be closed when primary eligibility changes.
+
 Select the environment once before using the commands in this section:
 
 ```bash
@@ -545,7 +573,8 @@ Every host must show:
 - default outgoing `allow`;
 - TCP 22 and 9100;
 - DB hosts: TCP 5432 and 9187;
-- routing hosts: TCP 5432, 6432, and 9127;
+- routing hosts: TCP 5432 and 9127;
+- routing hosts: PgBouncer 6432 and the HAProxy selector 6433 remain loopback-only;
 - routing hosts: a VRRP rule restricted to the other router.
 
 ### 8.6 Check Keepalived VIP ownership
@@ -574,8 +603,9 @@ ansible routing_nodes -i "$INVENTORY" -b -m shell \
   -a 'echo "show stat" | socat stdio /run/haproxy/admin.sock'
 ```
 
-One PgBouncer backend should be usable for writes; the backend paired with the
-standby should be marked down by the external primary check.
+`postgresql_write/local_pgbouncer` should be UP. Exactly one server in
+`postgresql_primary_selector` should be UP, and it must be the current writable
+PostgreSQL primary.
 
 Check the local statistics page:
 
@@ -608,6 +638,19 @@ unset PGPASSWORD
 Repeat on the other routing host. `SHOW POOLS` should return pool statistics
 without an authentication error.
 
+Also test the data path on both routing hosts with the application login:
+
+```bash
+PGPASSWORD='<app_db_password>' \
+psql "host=127.0.0.1 port=6432 dbname=qms user=qms_app sslmode=require" \
+  -Atc "SELECT host(inet_server_addr()), pg_is_in_recovery();"
+PGPASSWORD='<app_db_password>' \
+psql "host=127.0.0.1 port=6433 dbname=qms user=qms_app sslmode=require" \
+  -Atc "SELECT host(inet_server_addr()), pg_is_in_recovery();"
+```
+
+Both results must identify the same writable primary and end in `|f`.
+
 ### 8.9 Test the complete VIP connection path
 
 Run this from a host inside one of the `application_client_cidrs`:
@@ -623,7 +666,8 @@ unset PGPASSWORD
 
 Replace `<POSTGRESQL_VIP>` with the environment VIP. Expected:
 
-- connection succeeds through VIP → HAProxy → PgBouncer → PostgreSQL;
+- connection succeeds through VIP → HAProxy → local PgBouncer → local HAProxy
+  primary selector → PostgreSQL;
 - `pg_is_in_recovery` is `false`;
 - `inet_server_addr` identifies the current primary.
 
@@ -791,12 +835,14 @@ ansible-playbook -i "$INVENTORY" site.yml --ask-vault-pass
 On a routing node:
 
 ```bash
-sudo -u haproxy env HAPROXY_SERVER_ADDR=<ROUTER_IP> \
+sudo -u haproxy env HAPROXY_SERVER_ADDR=<DATABASE_NODE_IP> \
+  HAPROXY_SERVER_PORT=5432 \
   /usr/local/sbin/check-pg-primary
 echo $?
 ```
 
-Exit status `0` means the router's paired database is primary. Check
+Exit status `0` means that database node is the writable primary. Run the check
+for both data-node IPs; exactly one should return `0`. Check
 `/etc/haproxy/pg-primary-check.env`, direct PostgreSQL reachability, the
 `haproxy_check` login, and `pg_is_in_recovery()`.
 
@@ -830,7 +876,13 @@ Important behavior:
 - polling waits for monitor and node readiness;
 - UFW is intentionally reset and rebuilt on every full run;
 - the database/WAL play uses `serial: 1` to avoid restarting database hosts
-  simultaneously.
+  simultaneously;
+- the routing play uses `serial: 1` and reverse inventory order so the backup
+  router is converted before the preferred VIP owner.
 
 Do not manually remove LVM objects, PGDATA, pg_autoctl state, or archive keys
 unless an approved rebuild procedure explicitly requires it.
+
+The routing tier is updated one host at a time, backup-preferred router first.
+Brief connection resets remain possible when old pooled server sessions are
+closed during the topology change; applications must retry failed transactions.

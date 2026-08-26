@@ -63,6 +63,19 @@
     keepalived_haproxy_state: "{{ 'MASTER' if routing_slot == 'primary' else 'BACKUP' }}"
     keepalived_haproxy_priority: "{{ 101 if routing_slot == 'primary' else 100 }}"
 
+- name: Validate routing topology ports and database candidates
+  ansible.builtin.assert:
+    that:
+      - groups['db_primary'] | length == 1
+      - groups['db_standby'] | length == 1
+      - pgbouncer_listen_address in ['127.0.0.1', '::1']
+      - haproxy_primary_selector_address in ['127.0.0.1', '::1']
+      - pgbouncer_listen_port | int != haproxy_primary_selector_port | int
+      - haproxy_primary_selector_port | int != haproxy_listen_port | int
+    fail_msg: >-
+      The routing tier requires one primary candidate, one standby candidate,
+      and distinct loopback ports for PgBouncer and the primary selector.
+
 - name: Deploy HAProxy primary-state health-check credentials
   ansible.builtin.template:
     src: pg-primary-check.env.j2
@@ -102,6 +115,11 @@
       #!/usr/bin/env bash
       set -euo pipefail
       /usr/bin/systemctl is-active --quiet haproxy
+      /usr/bin/systemctl is-active --quiet pgbouncer
+      /usr/bin/timeout 2 /usr/bin/bash -c \
+        '</dev/tcp/{{ pgbouncer_listen_address }}/{{ pgbouncer_listen_port }}'
+      /usr/bin/timeout 2 /usr/bin/bash -c \
+        '</dev/tcp/{{ haproxy_primary_selector_address }}/{{ haproxy_primary_selector_port }}'
   notify: Restart Keepalived
 
 - name: Deploy Keepalived configuration

@@ -72,8 +72,10 @@ flowchart LR
     APP -->|"TLS PostgreSQL :5432"| VIP
     VIP --> R1
     VIP -. "VRRP failover" .-> R2
-    R1 -->|"PgBouncer :6432"| DB1
-    R2 -->|"PgBouncer :6432"| DB2
+    R1 -->|"dynamic primary route"| DB1
+    R1 -->|"dynamic primary route"| DB2
+    R2 -->|"dynamic primary route"| DB1
+    R2 -->|"dynamic primary route"| DB2
     DB1 <-->|"Streaming replication"| DB2
     MON -->|"Health and state"| DB1
     MON -->|"Health and state"| DB2
@@ -92,13 +94,14 @@ The application write path is:
 Application
   -> 192.168.129.110:5432
   -> HAProxy on the current VIP owner
-  -> PgBouncer paired with the current writable database
+  -> local PgBouncer:6432
+  -> local HAProxy primary selector:6433
   -> PostgreSQL primary:5432
 ```
 
-HAProxy checks `pg_is_in_recovery()` and only enables the PgBouncer path paired
-with the writable PostgreSQL node. Applications must use the VIP and must not
-connect directly to an individual database server.
+Each router's HAProxy checks both data nodes with `pg_is_in_recovery()` and only
+enables the writable PostgreSQL node. Applications must use the VIP and must
+not connect directly to a router, pooler, selector, or database server.
 
 ## 4. Server inventory
 
@@ -142,7 +145,8 @@ be sent separately through the approved enterprise secret-transfer mechanism.
 | Node exporter | `9100/tcp` | Prometheus | Scraper network only |
 | PostgreSQL exporter | `9187/tcp` | Prometheus | DB hosts; scraper network only |
 | PgBouncer exporter | `9127/tcp` | Prometheus | Routing hosts; scraper network only |
-| PgBouncer listener | `6432/tcp` | HAProxy/internal diagnostics | Cluster network only |
+| PgBouncer listener | `6432/tcp` | Local HAProxy/internal diagnostics | Loopback only |
+| HAProxy primary selector | `6433/tcp` | Local PgBouncer | Loopback only |
 | HAProxy statistics | `8404/tcp` | Local operations | Bound locally by service but not opened by UFW |
 | SSH | `22/tcp` | Named administrators/Ansible | See security follow-up in Section 14 |
 
@@ -169,8 +173,9 @@ recovered former primary is expected to rejoin as a standby after reconciliation
 Keepalived normally places the VIP on `BHC-PGBSQLU03`. If that node or its
 HAProxy service becomes unavailable, `BHC-PGBSQLU04` acquires the VIP.
 
-HAProxy runs on both routing nodes. Only a PgBouncer backend paired with the
-current writable PostgreSQL node is enabled for application traffic.
+HAProxy and PgBouncer run on both routing nodes. Each local primary selector
+tracks both database candidates, so either router can write to whichever node
+is currently primary.
 
 ### 6.3 Application behavior
 

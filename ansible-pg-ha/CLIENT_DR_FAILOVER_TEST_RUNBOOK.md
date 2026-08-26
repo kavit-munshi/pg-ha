@@ -10,7 +10,8 @@ The standard exercise proves:
 - baseline platform health;
 - the routing VIP moves to the peer router and SQL remains writable;
 - pg_auto_failover performs a controlled database switchover;
-- HAProxy follows the promoted writable primary;
+- both routers' loopback HAProxy selectors and local PgBouncer paths follow the
+  promoted writable primary;
 - routing and database topology return to the starting state;
 - final health checks pass.
 
