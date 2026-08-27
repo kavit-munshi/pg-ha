@@ -38,6 +38,9 @@ Documentation:
 - [RUBRIK_WAL_CUTOVER_AND_DR_RUNBOOK.md](RUBRIK_WAL_CUTOVER_AND_DR_RUNBOOK.md)
   — authoritative Rubrik cutover, legacy monitor-WAL removal, rollback, and
   database DR procedures
+- [MANUAL_DB_CRASH_RECOVERY.md](MANUAL_DB_CRASH_RECOVERY.md) — manual primary
+  VM crash response, fencing, routing verification, pg_rewind/rejoin diagnosis,
+  and stalled recovery remediation
 
 Environment-specific addresses are in `group_vars/uat.yml` and
 `group_vars/prod.yml`; common tunables and guarded secret defaults are in
