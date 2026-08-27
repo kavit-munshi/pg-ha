@@ -67,6 +67,60 @@
           - (postgres_exporter_port | string) + '/tcp' in test_ufw_status.stdout
       when: inventory_hostname in groups['db_cluster']
 
+    - name: Require safe Rubrik firewall sources
+      ansible.builtin.assert:
+        that:
+          - rubrik_allowed_cidrs | length > 0
+          - "'any' not in rubrik_allowed_cidrs"
+          - >-
+            '0.0.0.0/0' not in rubrik_allowed_cidrs or
+            rubrik_allow_world_source | bool
+          - "'::/0' not in rubrik_allowed_cidrs"
+      when:
+        - rubrik_firewall_enabled | bool
+        - inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+
+    - name: Require source-restricted Rubrik UFW ports
+      ansible.builtin.assert:
+        that:
+          - (item.1 | string) + '/tcp' in test_ufw_status.stdout
+          - item.0 in test_ufw_status.stdout
+        fail_msg: >-
+          The UFW status does not contain Rubrik TCP port {{ item.1 }} for the
+          approved source {{ item.0 }}.
+      loop: "{{ rubrik_allowed_cidrs | product(rubrik_inbound_tcp_ports) | list }}"
+      when:
+        - rubrik_firewall_enabled | bool
+        - inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+
+    - name: Require destination-restricted Rubrik TCP egress
+      ansible.builtin.assert:
+        that:
+          - (item.1 | string) + '/tcp' in test_ufw_status.stdout
+          - item.0 in test_ufw_status.stdout
+          - "'ALLOW OUT' in test_ufw_status.stdout"
+        fail_msg: >-
+          The UFW status does not contain Rubrik TCP egress {{ item.1 }} to the
+          approved destination {{ item.0 }}.
+      loop: "{{ rubrik_allowed_cidrs | product(rubrik_outbound_tcp_ports) | list }}"
+      when:
+        - rubrik_firewall_enabled | bool
+        - inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+
+    - name: Require destination-restricted Rubrik UDP egress
+      ansible.builtin.assert:
+        that:
+          - (item.1 | string) + '/udp' in test_ufw_status.stdout
+          - item.0 in test_ufw_status.stdout
+          - "'ALLOW OUT' in test_ufw_status.stdout"
+        fail_msg: >-
+          The UFW status does not contain Rubrik UDP egress {{ item.1 }} to the
+          approved destination {{ item.0 }}.
+      loop: "{{ rubrik_allowed_cidrs | product(rubrik_outbound_udp_ports) | list }}"
+      when:
+        - rubrik_firewall_enabled | bool
+        - inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+
     - name: Require routing UFW ports
       ansible.builtin.assert:
         that:

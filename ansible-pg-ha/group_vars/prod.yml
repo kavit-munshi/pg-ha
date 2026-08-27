@@ -4,6 +4,12 @@ deployment_environment: prod
 # monitor SSH archive is removed but its SSH keys are retained for rollback.
 postgresql_wal_archive_provider: rubrik
 rubrik_wal_cutover_confirmed: false
+# Temporary broad Rubrik source requested by the client. This permits every
+# routable IPv4 source to reach the RBS listener ports; replace it with the
+# approved Rubrik node /32 entries as soon as those addresses are available.
+rubrik_allow_world_source: true
+rubrik_allowed_cidrs:
+  - 0.0.0.0/0
 # Production storage is reported as pre-provisioned only after the storage team
 # confirms every LVM, XFS, mount, and fstab entry. Keep false to prevent Ansible
 # from repartitioning disks during the initial Production deployment.

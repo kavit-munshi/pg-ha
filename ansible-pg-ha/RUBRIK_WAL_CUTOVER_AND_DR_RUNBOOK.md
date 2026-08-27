@@ -102,6 +102,16 @@ Before cleanup, obtain written confirmation of:
 8. how to verify the latest successful backup and recovery point;
 9. the vendor-supported restore procedure.
 
+Before applying the Ansible firewall role, populate the selected environment's
+`rubrik_allowed_cidrs` with the approved Rubrik cluster/source addresses. On
+the two data nodes only, the role permits inbound TCP 12800/12801 from Rubrik
+and outbound TCP 111/9639/32764:32769 plus UDP 111/32764:32769 to Rubrik. It
+rejects empty endpoint lists, `any`, and `::/0`. An IPv4 `0.0.0.0/0` exception
+requires `rubrik_allow_world_source=true`, must be recorded as a temporary
+break-glass exposure, and should be replaced with Rubrik node `/32` entries.
+The network team must permit the same directional flows on external firewalls
+and confirm them against the installed Rubrik release.
+
 Rubrik configuration must be durable before the legacy include is removed.
 Never leave `archive_mode=on` with an empty or failing `archive_command`; WAL
 can accumulate until `/pgdata/wal` fills. Never use `/bin/true` as a temporary

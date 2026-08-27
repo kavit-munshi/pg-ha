@@ -424,11 +424,29 @@ verbose status.
 | All nodes | 9100/tcp | `metrics_allowed_cidr` |
 | DB cluster | 5432/tcp | `ufw_database_allowed_cidrs` |
 | DB cluster | 9187/tcp | `metrics_allowed_cidr` |
+| DB primary and standby, inbound | 12800/tcp, 12801/tcp | each entry in `rubrik_allowed_cidrs` when `rubrik_firewall_enabled=true` |
+| DB primary and standby, outbound | 111/tcp+udp, 9639/tcp, 32764:32769/tcp+udp | each entry in `rubrik_allowed_cidrs` when `rubrik_firewall_enabled=true` |
 | Routing | 5432/tcp | each entry in `application_client_cidrs` |
 | Routing | 9127/tcp | `metrics_allowed_cidr` |
 | Routing | VRRP/112 | other router IP only |
 
 Defaults are incoming deny and outgoing allow. UFW logging is on.
+
+Rubrik rules are source-restricted and apply only to the two PostgreSQL data
+candidates, not the monitor or routing nodes. `rubrik_firewall_enabled`
+automatically follows the `rubrik` archive-provider selection. UAT and
+Production must populate `rubrik_allowed_cidrs` with approved Rubrik cluster
+addresses before the firewall role can run. The assertions reject an empty
+list, `any`, and `::/0`. A temporary `0.0.0.0/0` source requires the explicit
+`rubrik_allow_world_source=true` break-glass acknowledgement. The port lists remain configurable as
+`rubrik_inbound_tcp_ports`, `rubrik_outbound_tcp_ports`, and
+`rubrik_outbound_udp_ports` for the approved Rubrik release.
+
+Rubrik reaches RBS on inbound TCP 12800/12801. Database hosts initiate WAL/log
+and NFS traffic toward Rubrik, so 9639 and the NFS ports are outbound rules;
+they are never exposed as inbound database-host listeners. The explicit
+outbound entries document the approved paths even though the global outgoing
+policy is allow. External firewalls must permit the same directional flows.
 
 `ufw_reset_rules: true` is deliberate desired-state enforcement. It also means
 the role reports changes and briefly rebuilds UFW on each full run. Unmanaged

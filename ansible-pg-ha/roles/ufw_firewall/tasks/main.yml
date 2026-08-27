@@ -6,6 +6,32 @@
     update_cache: true
     cache_valid_time: 3600
 
+- name: Validate Rubrik firewall source restrictions
+  ansible.builtin.assert:
+    that:
+      - rubrik_allowed_cidrs | type_debug == 'list'
+      - rubrik_allowed_cidrs | length > 0
+      - rubrik_inbound_tcp_ports | type_debug == 'list'
+      - rubrik_inbound_tcp_ports | length > 0
+      - rubrik_outbound_tcp_ports | type_debug == 'list'
+      - rubrik_outbound_tcp_ports | length > 0
+      - rubrik_outbound_udp_ports | type_debug == 'list'
+      - rubrik_outbound_udp_ports | length > 0
+      - "'any' not in rubrik_allowed_cidrs"
+      - >-
+        '0.0.0.0/0' not in rubrik_allowed_cidrs or
+        rubrik_allow_world_source | bool
+      - "'::/0' not in rubrik_allowed_cidrs"
+    fail_msg: >-
+      Rubrik firewall rules are enabled, but no safe Rubrik source list is
+      configured. Set rubrik_allowed_cidrs in the selected environment to the
+      approved Rubrik cluster IP addresses or narrow CIDRs. Broad sources such
+      as any and ::/0 are prohibited. IPv4 0.0.0.0/0 requires the explicit
+      break-glass acknowledgement rubrik_allow_world_source=true.
+  when:
+    - rubrik_firewall_enabled | bool
+    - inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+
 - name: Reset UFW to remove undeclared rules
   community.general.ufw:
     state: reset
@@ -56,6 +82,44 @@
     proto: tcp
     comment: Prometheus PostgreSQL exporter
   when: inventory_hostname in groups['db_cluster']
+
+- name: Allow Rubrik cluster access to Backup Service
+  community.general.ufw:
+    rule: allow
+    from_ip: "{{ item.0 }}"
+    to_port: "{{ item.1 }}"
+    proto: tcp
+    comment: Rubrik Backup Service
+  loop: "{{ rubrik_allowed_cidrs | product(rubrik_inbound_tcp_ports) | list }}"
+  when:
+    - rubrik_firewall_enabled | bool
+    - inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+
+- name: Allow PostgreSQL WAL and NFS TCP traffic to Rubrik
+  community.general.ufw:
+    rule: allow
+    direction: out
+    to_ip: "{{ item.0 }}"
+    to_port: "{{ item.1 }}"
+    proto: tcp
+    comment: Rubrik PostgreSQL outbound
+  loop: "{{ rubrik_allowed_cidrs | product(rubrik_outbound_tcp_ports) | list }}"
+  when:
+    - rubrik_firewall_enabled | bool
+    - inventory_hostname in (groups['db_primary'] + groups['db_standby'])
+
+- name: Allow PostgreSQL NFS UDP traffic to Rubrik
+  community.general.ufw:
+    rule: allow
+    direction: out
+    to_ip: "{{ item.0 }}"
+    to_port: "{{ item.1 }}"
+    proto: udp
+    comment: Rubrik PostgreSQL outbound
+  loop: "{{ rubrik_allowed_cidrs | product(rubrik_outbound_udp_ports) | list }}"
+  when:
+    - rubrik_firewall_enabled | bool
+    - inventory_hostname in (groups['db_primary'] + groups['db_standby'])
 
 - name: Allow application connections to HAProxy VIP
   community.general.ufw:

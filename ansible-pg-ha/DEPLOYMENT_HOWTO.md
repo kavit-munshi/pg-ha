@@ -196,6 +196,10 @@ Confirm at least:
 - all storage devices and logical-volume sizes match VMware provisioning;
 - `ufw_ssh_allowed_cidrs` contains the operator/control network;
 - `ufw_database_allowed_cidrs` contains only approved database clients;
+- `rubrik_allowed_cidrs` contains the approved Rubrik cluster/source addresses
+  when `postgresql_wal_archive_provider` is `rubrik`;
+- if a temporary `0.0.0.0/0` Rubrik source is approved, the environment also
+  sets `rubrik_allow_world_source: true` and records the exception and expiry;
 - NTP, exporter, VIP, and service ports are correct.
 
 > **Firewall warning**
@@ -573,9 +577,18 @@ Every host must show:
 - default outgoing `allow`;
 - TCP 22 and 9100;
 - DB hosts: TCP 5432 and 9187;
+- DB primary/standby hosts: inbound TCP 12800 and 12801 from every approved
+  entry in `rubrik_allowed_cidrs` when Rubrik is selected;
+- DB primary/standby hosts: outbound TCP 111, 9639, and 32764:32769 plus
+  outbound UDP 111 and 32764:32769 to every approved Rubrik destination;
 - routing hosts: TCP 5432 and 9127;
 - routing hosts: PgBouncer 6432 and the HAProxy selector 6433 remain loopback-only;
 - routing hosts: a VRRP rule restricted to the other router.
+
+Rubrik WAL/log and NFS connections are initiated outbound by the PostgreSQL
+hosts. Do not open ports 9639, 111, or 32764:32769 as inbound database-host
+listeners. Apply external-firewall rules using the same directions, exact
+Rubrik endpoint addresses, and the matrix approved for the installed release.
 
 ### 8.6 Check Keepalived VIP ownership
 
