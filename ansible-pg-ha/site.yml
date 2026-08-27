@@ -20,6 +20,18 @@
           - pgbouncer_listen_port | int != haproxy_primary_selector_port | int
           - haproxy_primary_selector_port | int != haproxy_listen_port | int
           - prometheus_scrape_cidr | length > 0
+          - >-
+            not (rubrik_firewall_enabled | bool) or
+            (
+              rubrik_allowed_cidrs | type_debug == 'list' and
+              rubrik_allowed_cidrs | length > 0 and
+              'any' not in rubrik_allowed_cidrs and
+              (
+                '0.0.0.0/0' not in rubrik_allowed_cidrs or
+                rubrik_allow_world_source | bool
+              ) and
+              '::/0' not in rubrik_allowed_cidrs
+            )
           - keepalived_interface | length > 0
           - keepalived_interface != "CHANGE_ME"
           - >-
@@ -46,6 +58,9 @@
           every inventory ansible_host exactly matches its host_ips entry before
           deployment. For Rubrik, also confirm a successful base backup and
           durable WAL configuration by setting rubrik_wal_cutover_confirmed=true.
+          When the Rubrik firewall is enabled, populate rubrik_allowed_cidrs
+          with approved Rubrik cluster/source addresses. A 0.0.0.0/0 source
+          additionally requires rubrik_allow_world_source=true.
           Use wal_archive_cleanup_force=true only for an approved emergency
           removal that intentionally bypasses Rubrik readiness validation.
 

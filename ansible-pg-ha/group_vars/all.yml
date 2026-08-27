@@ -109,6 +109,30 @@ ufw_ssh_allowed_cidrs:
 # design also provisions matching PostgreSQL pg_hba.conf rules.
 ufw_database_allowed_cidrs:
   - "{{ cluster_cidr }}"
+
+# Rubrik PostgreSQL protection is enabled only from explicitly approved Rubrik
+# cluster/source addresses. UAT and Production must override the empty list.
+# "any" and ::/0 are prohibited; 0.0.0.0/0 requires an explicit break-glass
+# acknowledgement and should be replaced with Rubrik /32 entries. Rubrik CDM reaches RBS on the inbound
+# ports. WAL/log and NFS data traffic are initiated by the database host toward
+# Rubrik. Explicit outbound rules document those flows even though the global
+# UFW policy currently allows outgoing traffic by default.
+rubrik_firewall_enabled: >-
+  {{ postgresql_wal_archive_provider == 'rubrik' }}
+# Break-glass acknowledgement for a world-scoped Rubrik source. Keep false in
+# normal environments and use explicit Rubrik node /32 entries instead.
+rubrik_allow_world_source: false
+rubrik_allowed_cidrs: []
+rubrik_inbound_tcp_ports:
+  - "12800"
+  - "12801"
+rubrik_outbound_tcp_ports:
+  - "111"
+  - "9639"
+  - "32764:32769"
+rubrik_outbound_udp_ports:
+  - "111"
+  - "32764:32769"
 configure_logstash_forwarding: false
 logstash_port: 514
 rubrik_rbs_enabled: false
