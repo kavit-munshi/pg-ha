@@ -16,7 +16,9 @@
   delay: 5
   until:
     - pg_auto_failover_registered_primary.rc == 0
-    - groups['db_primary'][0] in pg_auto_failover_registered_primary.stdout
+    - >-
+      groups['db_primary'][0] in pg_auto_failover_registered_primary.stdout or
+      groups['db_primary'][0].split('.')[0] in pg_auto_failover_registered_primary.stdout
   when: inventory_hostname in groups['db_standby']
 
 - name: Build monitor connection URI
@@ -460,4 +462,6 @@
   delay: 5
   until:
     - pg_auto_failover_cluster_registration.rc == 0
-    - inventory_hostname in pg_auto_failover_cluster_registration.stdout
+    - >-
+      inventory_hostname in pg_auto_failover_cluster_registration.stdout or
+      inventory_hostname_short in pg_auto_failover_cluster_registration.stdout

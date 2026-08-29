@@ -18,19 +18,19 @@ host_ips:
   BHC-QMSSQLP01.bayshore.ca: 192.168.128.134
   BHC-QMSSQLP02.bayshore.ca: 192.168.128.135
   BHC-QMSSQLP03.bayshore.ca: 192.168.128.136
-  BHC-PGBSQLP01: 192.168.128.137
-  BHC-PGBSQLP02: 192.168.128.138
+  BHC-PGBSQLP01.bayshore.ca: 192.168.128.137
+  BHC-PGBSQLP02.bayshore.ca: 192.168.128.138
 cluster_cidr: 192.168.128.0/24
 
 # Central Prometheus is external to all_nodes. The repository installs and
 # permits exporters but does not install the Prometheus server itself.
-prometheus_server_hostname: BHC-PGMSQLP01
+prometheus_server_hostname: BHC-PGMSQLP01.bayshore.ca
 prometheus_server_ip: 192.168.128.140
 prometheus_scrape_cidr: 192.168.128.140/32
 
 application_client_cidrs:
   - 192.168.4.0/24
-postgresql_vip_hostname: PGBQMSLSP01
+postgresql_vip_hostname: PGBQMSLSP01.bayshore.ca
 postgresql_vip: 192.168.128.139
 postgresql_vip_prefix: 24
 

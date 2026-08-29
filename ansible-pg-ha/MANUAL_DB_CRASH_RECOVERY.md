@@ -473,3 +473,5 @@ Preserve monitor state, HAProxy state, pg_autoctl journal, PostgreSQL logs,
 `pg_stat_replication`, mount information, timestamps, application outage,
 timelines, rewind output, and Rubrik recovery-point evidence in the incident
 record.
+
+watch -n1 'sudo -u postgres psql -tAc "SELECT CASE WHEN pg_is_in_recovery() THEN '\''standby'\'' ELSE '\''primary'\'' END, COALESCE(EXTRACT(EPOCH FROM (now()-pg_last_xact_replay_timestamp()))::int,0);"'

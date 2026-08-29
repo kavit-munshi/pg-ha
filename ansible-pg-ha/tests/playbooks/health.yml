@@ -438,8 +438,14 @@
       run_once: true  # noqa: run-once[task]
       failed_when: >-
         test_pg_autoctl_state.rc != 0 or
-        groups['db_primary'][0] not in test_pg_autoctl_state.stdout or
-        groups['db_standby'][0] not in test_pg_autoctl_state.stdout or
+        (
+          groups['db_primary'][0] not in test_pg_autoctl_state.stdout and
+          groups['db_primary'][0].split('.')[0] not in test_pg_autoctl_state.stdout
+        ) or
+        (
+          groups['db_standby'][0] not in test_pg_autoctl_state.stdout and
+          groups['db_standby'][0].split('.')[0] not in test_pg_autoctl_state.stdout
+        ) or
         test_pg_autoctl_state.stdout is not search('(?m)\|\s*primary\s*\|\s*primary\s*$') or
         test_pg_autoctl_state.stdout is not search('(?m)\|\s*secondary\s*\|\s*secondary\s*$')
 

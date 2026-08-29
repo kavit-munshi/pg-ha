@@ -68,6 +68,15 @@
           {{ ((groups['db_primary'] + groups['db_standby']) |
               difference([test_db_original_primary]) | first) }}
 
+    - name: Build pg_auto_failover node-name compatibility patterns
+      ansible.builtin.set_fact:
+        test_db_original_primary_pattern: >-
+          (?m)^(?:{{ test_db_original_primary | regex_escape }}|{{
+          test_db_original_primary.split('.')[0] | regex_escape }})\s*\|
+        test_db_promotion_target_pattern: >-
+          (?m)^(?:{{ test_db_promotion_target | regex_escape }}|{{
+          test_db_promotion_target.split('.')[0] | regex_escape }})\s*\|
+
     - name: Require stable pg_auto_failover state before testing
       ansible.builtin.command:
         argv:
@@ -83,9 +92,9 @@
       failed_when: >-
         test_db_initial_monitor_state.rc != 0 or
         test_db_initial_monitor_state.stdout is not
-        search('(?m)^' + test_db_original_primary + '\s*\|.*\|\s*primary\s*\|\s*primary\s*$') or
+        search(test_db_original_primary_pattern + '.*\|\s*primary\s*\|\s*primary\s*$') or
         test_db_initial_monitor_state.stdout is not
-        search('(?m)^' + test_db_promotion_target + '\s*\|.*\|\s*secondary\s*\|\s*secondary\s*$')
+        search(test_db_promotion_target_pattern + '.*\|\s*secondary\s*\|\s*secondary\s*$')
 
     - name: Wait for baseline VIP SQL listener
       ansible.builtin.wait_for:
@@ -177,10 +186,10 @@
           until:
             - >-
               test_db_failed_over_state.stdout is
-              search('(?m)^' + test_db_promotion_target + '\s*\|.*\|\s*primary\s*\|\s*primary\s*$')
+              search(test_db_promotion_target_pattern + '.*\|\s*primary\s*\|\s*primary\s*$')
             - >-
               test_db_failed_over_state.stdout is
-              search('(?m)^' + test_db_original_primary + '\s*\|.*\|\s*secondary\s*\|\s*secondary\s*$')
+              search(test_db_original_primary_pattern + '.*\|\s*secondary\s*\|\s*secondary\s*$')
 
         - name: Verify VIP routes writes to promoted primary
           block:
@@ -330,10 +339,10 @@
           until:
             - >-
               test_db_restored_state.stdout is
-              search('(?m)^' + test_db_original_primary + '\s*\|.*\|\s*primary\s*\|\s*primary\s*$')
+              search(test_db_original_primary_pattern + '.*\|\s*primary\s*\|\s*primary\s*$')
             - >-
               test_db_restored_state.stdout is
-              search('(?m)^' + test_db_promotion_target + '\s*\|.*\|\s*secondary\s*\|\s*secondary\s*$')
+              search(test_db_promotion_target_pattern + '.*\|\s*secondary\s*\|\s*secondary\s*$')
 
         - name: Verify VIP routes writes to restored original primary
           block:
