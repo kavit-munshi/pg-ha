@@ -72,10 +72,10 @@
     marker: "# {mark} ANSIBLE MANAGED POSTGRESQL HA HOSTS"
     block: |
       {% for host in groups['all_nodes'] %}
-      {{ host_ips[host] }} {{ host }}
+      {{ host_ips[host] }} {{ host }} {{ host.split('.')[0] }}
       {% endfor %}
       {% if postgresql_vip_hostname | default('') | length > 0 %}
-      {{ postgresql_vip }} {{ postgresql_vip_hostname }}
+      {{ postgresql_vip }} {{ postgresql_vip_hostname }} {{ postgresql_vip_hostname.split('.')[0] }}
       {% endif %}
 
 - name: Apply database and routing sysctl settings

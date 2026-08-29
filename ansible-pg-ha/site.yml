@@ -71,7 +71,9 @@
     - role: ufw_firewall
       tags:
         - firewall
-    - os_tuning
+    - role: os_tuning
+      tags:
+        - os_tuning
     - role: storage_lvm
       when: storage_lvm_enabled | default(false) | bool
       tags:

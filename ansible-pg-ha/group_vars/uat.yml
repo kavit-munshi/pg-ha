@@ -12,11 +12,11 @@ rubrik_allow_world_source: true
 rubrik_allowed_cidrs:
   - 0.0.0.0/0
 host_ips:
-  BHC-QMSSQLU05: 192.168.129.105
-  BHC-QMSSQLU06: 192.168.129.106
-  BHC-QMSSQLU07: 192.168.129.107
-  BHC-PGBSQLU03: 192.168.129.108
-  BHC-PGBSQLU04: 192.168.129.109
+  BHC-QMSSQLU05.bayshore.ca: 192.168.129.105
+  BHC-QMSSQLU06.bayshore.ca: 192.168.129.106
+  BHC-QMSSQLU07.bayshore.ca: 192.168.129.107
+  BHC-PGBSQLU03.bayshore.ca: 192.168.129.108
+  BHC-PGBSQLU04.bayshore.ca: 192.168.129.109
 cluster_cidr: 192.168.129.0/24
 prometheus_scrape_cidr: 192.168.129.0/24
 application_client_cidrs:
