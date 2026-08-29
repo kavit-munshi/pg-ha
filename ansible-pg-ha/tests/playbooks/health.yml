@@ -48,6 +48,8 @@
           - verbose
       register: test_ufw_status
       changed_when: false
+      environment:
+        LC_ALL: C
       failed_when: >-
         test_ufw_status.rc != 0 or
         'Status: active' not in test_ufw_status.stdout or
@@ -83,8 +85,16 @@
     - name: Require source-restricted Rubrik UFW ports
       ansible.builtin.assert:
         that:
-          - (item.1 | string) + '/tcp' in test_ufw_status.stdout
-          - item.0 in test_ufw_status.stdout
+          - >-
+            test_ufw_status.stdout_lines
+            | select('search', (item.1 | string | regex_escape) + '/tcp')
+            | select('search', 'ALLOW IN')
+            | select(
+                'search',
+                ('Anywhere' if item.0 == '0.0.0.0/0' else item.0)
+                | regex_escape
+              )
+            | list | length > 0
         fail_msg: >-
           The UFW status does not contain Rubrik TCP port {{ item.1 }} for the
           approved source {{ item.0 }}.
@@ -96,9 +106,16 @@
     - name: Require destination-restricted Rubrik TCP egress
       ansible.builtin.assert:
         that:
-          - (item.1 | string) + '/tcp' in test_ufw_status.stdout
-          - item.0 in test_ufw_status.stdout
-          - "'ALLOW OUT' in test_ufw_status.stdout"
+          - >-
+            test_ufw_status.stdout_lines
+            | select('search', (item.1 | string | regex_escape) + '/tcp')
+            | select('search', 'ALLOW OUT')
+            | select(
+                'search',
+                ('Anywhere' if item.0 == '0.0.0.0/0' else item.0)
+                | regex_escape
+              )
+            | list | length > 0
         fail_msg: >-
           The UFW status does not contain Rubrik TCP egress {{ item.1 }} to the
           approved destination {{ item.0 }}.
@@ -110,9 +127,16 @@
     - name: Require destination-restricted Rubrik UDP egress
       ansible.builtin.assert:
         that:
-          - (item.1 | string) + '/udp' in test_ufw_status.stdout
-          - item.0 in test_ufw_status.stdout
-          - "'ALLOW OUT' in test_ufw_status.stdout"
+          - >-
+            test_ufw_status.stdout_lines
+            | select('search', (item.1 | string | regex_escape) + '/udp')
+            | select('search', 'ALLOW OUT')
+            | select(
+                'search',
+                ('Anywhere' if item.0 == '0.0.0.0/0' else item.0)
+                | regex_escape
+              )
+            | list | length > 0
         fail_msg: >-
           The UFW status does not contain Rubrik UDP egress {{ item.1 }} to the
           approved destination {{ item.0 }}.
@@ -576,7 +600,8 @@
         (
           test_haproxy_runtime_stats.stdout |
           regex_findall(
-            '(?m)^postgresql_primary_selector,[^,]+,(?:[^,]*,){15}UP,'
+            '(?m)^postgresql_primary_selector,' ~
+            '(?!FRONTEND,|BACKEND,)[^,]+,(?:[^,]*,){15}UP,'
           ) | length
         ) != 1
 

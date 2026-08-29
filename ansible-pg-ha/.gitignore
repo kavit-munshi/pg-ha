@@ -3,3 +3,5 @@
 artifacts/
 .ansible/
 .cache/
+collections/
+~$*

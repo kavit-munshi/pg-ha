@@ -1,0 +1,10 @@
+---
+# Generated/cache content is not part of this repository's lint scope. Keep
+# these exclusions explicit because some control servers receive a source copy
+# without .git metadata, in which case ansible-lint cannot use .gitignore.
+exclude_paths:
+  - .ansible/
+  - .cache/
+  - artifacts/
+  - collections/
+  - "~$*"
